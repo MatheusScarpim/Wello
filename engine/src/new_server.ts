@@ -8,11 +8,16 @@
 
 // import '@/assets/Host/HostExpress.js' // Arquivo não existe - comentado
 import * as dotenv from 'dotenv'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import Application from '@/core/Application'
 
-// Carrega variáveis de ambiente
-dotenv.config()
+// Carrega variáveis de ambiente (prioriza .env no CWD, depois o da raiz do repo)
+const cwdEnv = resolve(process.cwd(), '.env')
+const parentEnv = resolve(process.cwd(), '..', '.env')
+const envPath = existsSync(cwdEnv) ? cwdEnv : parentEnv
+dotenv.config({ path: envPath })
 
 /**
  * Função principal de inicialização

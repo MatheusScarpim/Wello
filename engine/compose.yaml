@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
-      - .env
+      - ../.env
     ports:
       - '8091:8081'  # Expondo a porta interna 8081 na porta 8091 do host
     volumes:
@@ -31,6 +31,8 @@ services:
     ports:
       - '27020:27017'  # Porta externa 27020 para não conflitar
     environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: 334455Matheus@
       MONGO_INITDB_DATABASE: welloDataBase
     volumes:
       - mongodb_data:/data/db
@@ -38,7 +40,7 @@ services:
     networks:
       - wello_network
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/admin -u admin -p "334455Matheus@" --authenticationDatabase admin --quiet
       interval: 10s
       timeout: 5s
       retries: 5
