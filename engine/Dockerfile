@@ -14,6 +14,8 @@ FROM base as deps
 
 COPY package.json pnpm-lock.yaml ./
 
+ENV PUPPETEER_SKIP_DOWNLOAD="true"
+
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
