@@ -1,0 +1,56 @@
+import { Router } from 'express'
+
+import authRoutes from './auth.routes'
+import botRoutes from './bot.routes'
+import botExportRoutes from './bot-export.routes'
+import contactRoutes from './contact.routes'
+import conversationRoutes from './conversation.routes'
+import dashboardRoutes from './dashboard.routes'
+import departmentRoutes from './department.routes'
+import expenseRoutes from './expense.routes'
+import finalizationRoutes from './finalization.routes'
+import finalizationMetricsRoutes from './finalization-metrics.routes'
+import iaRoutes from './ia.routes'
+import messageRoutes from './message.routes'
+import messageMetricsRoutes from './message-metrics.routes'
+import metaRoutes from './meta.routes'
+import operatorRoutes from './operator.routes'
+import queueRoutes from './queue.routes'
+import storageRoutes from './storage.routes'
+import tagRoutes from './tag.routes'
+import webhookRoutes from './webhook.routes'
+import whatsappRoutes from './whatsapp.routes'
+import whatsappInstanceRoutes from './whatsapp-instance.routes'
+import whitelabelRoutes from './whitelabel.routes'
+
+/**
+ * Configurador central de rotas
+ */
+export function setupRoutes(): Array<{ path: string; router: Router }> {
+  return [
+    { path: '/api/auth', router: authRoutes },
+    { path: '/api/conversations', router: conversationRoutes },
+    { path: '/api/messages', router: messageRoutes },
+    { path: '/api/bots', router: botRoutes },
+    { path: '/api/bots', router: botExportRoutes },
+    { path: '/api/whatsapp', router: whatsappRoutes },
+    { path: '/api/whatsapp/instances', router: whatsappInstanceRoutes },
+    { path: '/api/meta', router: metaRoutes },
+    { path: '/api/webhooks', router: webhookRoutes },
+    { path: '/api/storage', router: storageRoutes },
+    { path: '/api/expenses', router: expenseRoutes },
+    { path: '/api/departments', router: departmentRoutes },
+    { path: '/api/operators', router: operatorRoutes },
+    { path: '/api/queue', router: queueRoutes },
+    { path: '/api/finalizations', router: finalizationRoutes },
+    { path: '/api/settings/whitelabel', router: whitelabelRoutes },
+    { path: '/api/dashboard', router: dashboardRoutes },
+    { path: '/api/finalization-metrics', router: finalizationMetricsRoutes },
+    { path: '/api/message-metrics', router: messageMetricsRoutes },
+    { path: '/api/contacts', router: contactRoutes },
+    { path: '/api/ia', router: iaRoutes },
+    { path: '/api/tags', router: tagRoutes },
+  ]
+}
+
+export default setupRoutes

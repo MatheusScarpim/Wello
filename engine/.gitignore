@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+
+# Logs
+*.log
+
+# Tokens / Sessions
+tokens/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# TypeScript
+*.tsbuildinfo

@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  server:
+    container_name: wello-server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '8091:8081'  # Expondo a porta interna 8081 na porta 8091 do host
+    volumes:
+      - tokens:/usr/src/app/tokens
+      - wpp_sessions:/usr/src/app/.wwebjs_auth
+      - wpp_cache:/usr/src/app/.wwebjs_cache
+    networks:
+      - wello_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # MongoDB está rodando localmente na porta 27017
+  # Use DB_URL=mongodb://host.docker.internal:27020 no .env
+  # Ou descomente abaixo para usar MongoDB no Docker (pare o local primeiro)
+
+  mongodb:
+    container_name: wello-mongodb
+    image: mongo:latest
+    restart: unless-stopped
+    ports:
+      - '27020:27017'  # Porta externa 27020 para não conflitar
+    environment:
+      MONGO_INITDB_DATABASE: welloDataBase
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - wello_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  tokens:
+    driver: local
+  wpp_sessions:
+    driver: local
+  wpp_cache:
+    driver: local
+
+networks:
+  wello_network:
+    driver: bridge
+
+
+

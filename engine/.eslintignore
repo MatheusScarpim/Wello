@@ -1,0 +1,21 @@
+# Ignore build output
+/dist/
+ 
+# Ignore node_modules
+/node_modules/
+ 
+# Ignore public folder
+/public/
+ 
+# Ignore coverage reports
+/coverage/
+ 
+# Ignore logs
+/logs/
+ 
+# Ignore temporary files
+/.tmp/
+ 
+# Ignore specific files or folders
+/some-file.js
+/some-folder/

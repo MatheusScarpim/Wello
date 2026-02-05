@@ -1,0 +1,92 @@
+### API de Webhooks - Exemplos de Requisições
+### Você pode usar este arquivo com extensões como REST Client no VSCode
+
+@baseUrl = http://localhost:3000
+@webhookId = SEU_WEBHOOK_ID_AQUI
+
+### 1. Listar todos os webhooks
+GET {{baseUrl}}/api/webhooks
+Content-Type: application/json
+
+### 2. Listar webhooks com paginação e filtros
+GET {{baseUrl}}/api/webhooks?page=1&limit=10&enabled=true&event=message.received
+Content-Type: application/json
+
+### 3. Buscar webhook específico
+GET {{baseUrl}}/api/webhooks/{{webhookId}}
+Content-Type: application/json
+
+### 4. Criar novo webhook (exemplo básico)
+POST {{baseUrl}}/api/webhooks
+Content-Type: application/json
+
+{
+  "name": "Webhook de Mensagens",
+  "url": "https://meusite.com/webhook",
+  "events": ["message.received", "message.sent"],
+  "enabled": true
+}
+
+### 5. Criar webhook com todas as opções
+POST {{baseUrl}}/api/webhooks
+Content-Type: application/json
+
+{
+  "name": "Webhook Completo",
+  "url": "https://meusite.com/webhook",
+  "events": [
+    "message.received",
+    "message.sent",
+    "conversation.created",
+    "operator.assigned"
+  ],
+  "enabled": true,
+  "secret": "meu-secret-super-seguro",
+  "headers": {
+    "Authorization": "Bearer meu-token-123",
+    "X-Custom-Header": "valor-customizado"
+  },
+  "retryAttempts": 5,
+  "retryDelay": 2000
+}
+
+### 6. Atualizar webhook
+PUT {{baseUrl}}/api/webhooks/{{webhookId}}
+Content-Type: application/json
+
+{
+  "name": "Webhook Atualizado",
+  "enabled": false
+}
+
+### 7. Ativar webhook
+POST {{baseUrl}}/api/webhooks/{{webhookId}}/enable
+Content-Type: application/json
+
+### 8. Desativar webhook
+POST {{baseUrl}}/api/webhooks/{{webhookId}}/disable
+Content-Type: application/json
+
+### 9. Testar webhook
+POST {{baseUrl}}/api/webhooks/{{webhookId}}/test
+Content-Type: application/json
+
+### 10. Obter estatísticas
+GET {{baseUrl}}/api/webhooks/stats
+Content-Type: application/json
+
+### 11. Listar eventos disponíveis
+GET {{baseUrl}}/api/webhooks/events
+Content-Type: application/json
+
+### 12. Deletar webhook
+DELETE {{baseUrl}}/api/webhooks/{{webhookId}}
+Content-Type: application/json
+
+### 13. Buscar webhooks por evento específico
+GET {{baseUrl}}/api/webhooks?event=message.received
+Content-Type: application/json
+
+### 14. Buscar webhooks por nome
+GET {{baseUrl}}/api/webhooks?search=mensagens
+Content-Type: application/json

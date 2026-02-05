@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs cat:*)",
+      "Bash(findstr:*)",
+      "Bash(grep:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm install:*)",
+      "Bash(xargs:*)"
+    ]
+  }
+}

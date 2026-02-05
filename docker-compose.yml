@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: wello-mongodb
+    restart: unless-stopped
+    ports:
+      - "27021:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: 334455Matheus@
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - wello-network
+
+  # Backend Engine
+  engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    container_name: wello-engine
+    restart: unless-stopped
+    command: ["/bin/sh", "-c", "/usr/src/app/remove_singleton_lock.sh && node ./scripts/seed-operator.cjs && node ./dist/new_server.cjs"]
+    ports:
+      - "8091:8081"
+    env_file:
+      - ./engine/.env
+    volumes:
+      - engine_tokens:/usr/src/app/tokens
+    depends_on:
+      - mongodb
+    networks:
+      - wello-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8091}
+    container_name: wello-frontend
+    restart: unless-stopped
+    ports:
+      - "4176:4176"
+    depends_on:
+      - engine
+    networks:
+      - wello-network
+
+volumes:
+  mongodb_data:
+  engine_tokens:
+
+networks:
+  wello-network:
+    driver: bridge
+
+

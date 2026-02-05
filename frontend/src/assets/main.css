@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS Variables para Whitelabel */
+:root {
+  --color-primary: #cd2649;
+  --color-primary-dark: #ac1c3c;
+  --color-primary-light: #e85a7a;
+  --color-accent: #2563eb;
+  --color-sidebar-bg: #1f2937;
+  --color-sidebar-text: #f9fafb;
+  --color-header-bg: #ffffff;
+  --color-header-text: #111827;
+  --font-family: 'Inter', system-ui, sans-serif;
+  --border-radius: 0.75rem;
+  --color-primary-rgb: 205, 38, 73;
+  --color-primary-dark-rgb: 172, 28, 60;
+  --color-primary-light-rgb: 232, 90, 122;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family: var(--font-family);
+  }
+}
+
+/* Classes dinâmicas para cores do whitelabel */
+@layer utilities {
+  .bg-brand {
+    background-color: var(--color-primary) !important;
+  }
+  .bg-brand-dark {
+    background-color: var(--color-primary-dark) !important;
+  }
+  .bg-brand-light {
+    background-color: var(--color-primary-light) !important;
+  }
+  .text-brand {
+    color: var(--color-primary) !important;
+  }
+  .text-brand-dark {
+    color: var(--color-primary-dark) !important;
+  }
+  .border-brand {
+    border-color: var(--color-primary) !important;
+  }
+  .ring-brand {
+    --tw-ring-color: var(--color-primary) !important;
+  }
+  .bg-brand-50 {
+    background-color: color-mix(in srgb, var(--color-primary) 10%, white) !important;
+  }
+  .bg-brand-100 {
+    background-color: color-mix(in srgb, var(--color-primary) 20%, white) !important;
+  }
+  .text-brand-700 {
+    color: var(--color-primary-dark) !important;
+  }
+  .bg-sidebar {
+    background-color: var(--color-sidebar-bg) !important;
+  }
+  .text-sidebar {
+    color: var(--color-sidebar-text) !important;
+  }
+  .bg-header {
+    background-color: var(--color-header-bg) !important;
+  }
+  .text-header {
+    color: var(--color-header-text) !important;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+  }
+
+  .btn-secondary {
+    @apply btn bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-400;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+
+  .btn-success {
+    @apply btn bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;
+  }
+
+  .btn-outline {
+    @apply btn border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-gray-600 hover:bg-gray-100 focus:ring-gray-400;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-sm;
+  }
+
+  .select {
+    @apply input appearance-none bg-white cursor-pointer;
+  }
+
+  .textarea {
+    @apply input resize-none;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-200;
+  }
+
+  .card-body {
+    @apply p-6;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-green-100 text-green-800;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-100 text-yellow-800;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-100 text-red-800;
+  }
+
+  .badge-info {
+    @apply badge bg-blue-100 text-blue-800;
+  }
+
+  .badge-neutral {
+    @apply badge bg-gray-100 text-gray-800;
+  }
+
+  .table-container {
+    @apply overflow-x-auto;
+  }
+
+  .table {
+    @apply w-full text-sm;
+  }
+
+  .table th {
+    @apply text-left font-medium text-gray-500 uppercase tracking-wider px-4 py-3 bg-gray-50 border-b;
+  }
+
+  .table td {
+    @apply px-4 py-3 border-b border-gray-100;
+  }
+
+  .table tbody tr:hover {
+    @apply bg-gray-50;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+/* Message bubbles */
+.message-bubble {
+  @apply max-w-[70%] rounded-2xl px-4 py-2;
+}
+
+.message-incoming {
+  @apply bg-white border border-gray-200 rounded-tl-none;
+}
+
+.message-outgoing {
+  background-color: var(--color-primary) !important;
+  @apply text-white rounded-tr-none;
+}
+
+/* Sobrescrever cores do Tailwind com variáveis CSS */
+.bg-primary-500 {
+  background-color: var(--color-primary-light) !important;
+}
+.bg-primary-600 {
+  background-color: var(--color-primary) !important;
+}
+.bg-primary-700 {
+  background-color: var(--color-primary-dark) !important;
+}
+.bg-primary-50 {
+  background-color: color-mix(in srgb, var(--color-primary) 10%, white) !important;
+}
+.bg-primary-100 {
+  background-color: color-mix(in srgb, var(--color-primary) 20%, white) !important;
+}
+.text-primary-500 {
+  color: var(--color-primary-light) !important;
+}
+.text-primary-600 {
+  color: var(--color-primary) !important;
+}
+.text-primary-700 {
+  color: var(--color-primary-dark) !important;
+}
+.border-primary-500 {
+  border-color: var(--color-primary-light) !important;
+}
+.border-primary-600 {
+  border-color: var(--color-primary) !important;
+}
+.ring-primary-500 {
+  --tw-ring-color: var(--color-primary-light) !important;
+}
+.focus\:ring-primary-500:focus {
+  --tw-ring-color: var(--color-primary-light) !important;
+}
+.hover\:bg-primary-700:hover {
+  background-color: var(--color-primary-dark) !important;
+}
