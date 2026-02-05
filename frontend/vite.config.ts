@@ -15,19 +15,19 @@ export default defineConfig({
     allowedHosts: 'all',
     proxy: {
       '/api': {
-        target: 'http://localhost:8081',
+        target: 'http://20.109.17.147:8091',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:8081',
+        target: 'http://20.109.17.147:8091',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:8081',
+        target: 'http://20.109.17.147:8091',
         changeOrigin: true,
       },
       '/status': {
-        target: 'http://localhost:8081',
+        target: 'http://20.109.17.147:8091',
         changeOrigin: true,
       },
     },
@@ -37,19 +37,19 @@ export default defineConfig({
     allowedHosts: 'all',
     proxy: {
       '/api': {
-        target: 'http://localhost:8081',
+        target: 'http://20.109.17.147:8091',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:8081',
+        target: 'http://20.109.17.147:8091',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:8081',
+        target: 'http://20.109.17.147:8091',
         changeOrigin: true,
       },
       '/status': {
-        target: 'http://localhost:8081',
+        target: 'http://20.109.17.147:8091',
         changeOrigin: true,
       },
     },

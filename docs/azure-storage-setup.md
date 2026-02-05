@@ -33,7 +33,7 @@ pnpm add @azure/storage-blob
 Faça uma requisição POST para criar a configuração:
 
 ```bash
-curl -X POST http://localhost:8081/api/storage/config \
+curl -X POST http://20.109.17.147:8091/api/storage/config \
      -H "Content-Type: application/json" \
      -d '{
        "accountName": "nxzapstorage",
@@ -46,7 +46,7 @@ curl -X POST http://localhost:8081/api/storage/config \
 ### 2. Verificar status
 
 ```bash
-curl http://localhost:8081/api/storage/status
+curl http://20.109.17.147:8091/api/storage/status
 ```
 
 Deve retornar:
@@ -70,7 +70,7 @@ Quando você envia mensagens via `/api/messages/send` com mídia:
 #### Exemplo com base64
 
 ```bash
-curl -X POST http://localhost:8081/api/messages/send \
+curl -X POST http://20.109.17.147:8091/api/messages/send \
      -H "Content-Type: application/json" \
      -d '{
        "to": "5511999999999",
@@ -89,7 +89,7 @@ O middleware automaticamente:
 ### Exemplo com URL externa
 
 ```bash
-curl -X POST http://localhost:8081/api/messages/send \
+curl -X POST http://20.109.17.147:8091/api/messages/send \
      -H "Content-Type: application/json" \
      -d '{
        "to": "5511999999999",
@@ -164,7 +164,7 @@ Quando um usuário envia uma mídia via Meta API:
 ### Upload de arquivo (multipart)
 
 ```bash
-curl -X POST http://localhost:8081/api/storage/upload/file \
+curl -X POST http://20.109.17.147:8091/api/storage/upload/file \
      -F "file=@/caminho/para/imagem.jpg" \
      -F "userId=user123"
 ```
@@ -172,7 +172,7 @@ curl -X POST http://localhost:8081/api/storage/upload/file \
 ### Upload de base64
 
 ```bash
-curl -X POST http://localhost:8081/api/storage/upload/base64 \
+curl -X POST http://20.109.17.147:8091/api/storage/upload/base64 \
      -H "Content-Type: application/json" \
      -d '{
        "base64Data": "data:image/jpeg;base64,/9j/4AAQ...",
@@ -184,7 +184,7 @@ curl -X POST http://localhost:8081/api/storage/upload/base64 \
 ### Upload de URL
 
 ```bash
-curl -X POST http://localhost:8081/api/storage/upload/url \
+curl -X POST http://20.109.17.147:8091/api/storage/upload/url \
      -H "Content-Type: application/json" \
      -d '{
        "url": "https://example.com/image.jpg",
@@ -197,13 +197,13 @@ curl -X POST http://localhost:8081/api/storage/upload/url \
 ### Listar blobs
 
 ```bash
-curl http://localhost:8081/api/storage/blobs
+curl http://20.109.17.147:8091/api/storage/blobs
 ```
 
 ### Deletar blob
 
 ```bash
-curl -X DELETE http://localhost:8081/api/storage/blob/1234567890-abc123.jpg
+curl -X DELETE http://20.109.17.147:8091/api/storage/blob/1234567890-abc123.jpg
 ```
 
 ## Múltiplas Configurações
@@ -212,7 +212,7 @@ Você pode ter múltiplas configurações salvas, mas apenas uma ativa por vez:
 
 ```bash
 # Criar segunda configuração (inativa)
-curl -X POST http://localhost:8081/api/storage/config \
+curl -X POST http://20.109.17.147:8091/api/storage/config \
      -H "Content-Type: application/json" \
      -d '{
        "accountName": "nxzapstorage2",
@@ -222,7 +222,7 @@ curl -X POST http://localhost:8081/api/storage/config \
      }'
 
 # Ativar a segunda configuração
-curl -X PUT http://localhost:8081/api/storage/config/ID_DA_CONFIG \
+curl -X PUT http://20.109.17.147:8091/api/storage/config/ID_DA_CONFIG \
      -H "Content-Type: application/json" \
      -d '{"isActive": true}'
 ```
@@ -240,7 +240,7 @@ curl -X PUT http://localhost:8081/api/storage/config/ID_DA_CONFIG \
 
 Execute:
 ```bash
-curl http://localhost:8081/api/storage/config/active
+curl http://20.109.17.147:8091/api/storage/config/active
 ```
 
 Se não houver configuração ativa, crie uma nova ou ative uma existente.

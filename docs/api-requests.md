@@ -1,6 +1,6 @@
 # welloChat API Request Reference
 
-Base URL defaults to `http://localhost:8081`. Override the port through the `HTTP_PORT` environment variable.
+Base URL defaults to `http://20.109.17.147:8091`. Override the port through the `HTTP_PORT` environment variable.
 
 ---
 
@@ -36,7 +36,7 @@ Base URL defaults to `http://localhost:8081`. Override the port through the `HTT
 
   ```bash
   # JSON text message (WhatsApp default)
-  curl -X POST http://localhost:8081/api/messages/send \
+  curl -X POST http://20.109.17.147:8091/api/messages/send \
        -H "Content-Type: application/json" \
        -d '{
          "to": "5511999999999",
@@ -48,7 +48,7 @@ Base URL defaults to `http://localhost:8081`. Override the port through the `HTT
 
   ```bash
   # Image message with caption
-  curl -X POST http://localhost:8081/api/messages/send \
+  curl -X POST http://20.109.17.147:8091/api/messages/send \
        -H "Content-Type: application/json" \
        -d '{
          "to": "5511999999999",
@@ -61,7 +61,7 @@ Base URL defaults to `http://localhost:8081`. Override the port through the `HTT
 
   ```bash
   # Meta WhatsApp message (send through Meta cloud API credentials)
-  curl -X POST http://localhost:8081/api/messages/send \
+  curl -X POST http://20.109.17.147:8091/api/messages/send \
        -H "Content-Type: application/json" \
        -d '{
          "to": "5511999999999",
@@ -122,7 +122,7 @@ Base URL defaults to `http://localhost:8081`. Override the port through the `HTT
 
   Example:
   ```bash
-  curl -X POST http://localhost:8081/api/storage/config \
+  curl -X POST http://20.109.17.147:8091/api/storage/config \
        -H "Content-Type: application/json" \
        -d '{
          "accountName": "mystorageaccount",
@@ -142,7 +142,7 @@ Base URL defaults to `http://localhost:8081`. Override the port through the `HTT
 
   Example:
   ```bash
-  curl -X POST http://localhost:8081/api/storage/upload/file \
+  curl -X POST http://20.109.17.147:8091/api/storage/upload/file \
        -F "file=@image.jpg" \
        -F "userId=user123"
   ```
@@ -154,7 +154,7 @@ Base URL defaults to `http://localhost:8081`. Override the port through the `HTT
 
   Example:
   ```bash
-  curl -X POST http://localhost:8081/api/storage/upload/base64 \
+  curl -X POST http://20.109.17.147:8091/api/storage/upload/base64 \
        -H "Content-Type: application/json" \
        -d '{
          "base64Data": "data:image/jpeg;base64,/9j/4AAQ...",
@@ -170,7 +170,7 @@ Base URL defaults to `http://localhost:8081`. Override the port through the `HTT
 
   Example:
   ```bash
-  curl -X POST http://localhost:8081/api/storage/upload/url \
+  curl -X POST http://20.109.17.147:8091/api/storage/upload/url \
        -H "Content-Type: application/json" \
        -d '{
          "url": "https://example.com/image.jpg",

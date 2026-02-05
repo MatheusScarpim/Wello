@@ -12,12 +12,13 @@ RUN --mount=type=cache,target=/root/.npm \
 
 FROM base as deps
 
-COPY package.json pnpm-lock.yaml ./
-
 # Evita download do Chromium no postinstall do Puppeteer
-ENV PUPPETEER_SKIP_DOWNLOAD="1"
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD="1"
-ENV npm_config_puppeteer_skip_download="1"
+# IMPORTANTE: Definir ANTES de copiar package.json
+ENV PUPPETEER_SKIP_DOWNLOAD="true"
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD="true"
+ENV npm_config_puppeteer_skip_download="true"
+
+COPY package.json pnpm-lock.yaml ./
 
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
