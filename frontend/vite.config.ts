@@ -33,6 +33,7 @@ export default defineConfig({
   },
   preview: {
     port: 4176,
+    allowedHosts: ['wello.scarlat.dev.br'],
     proxy: {
       '/api': {
         target: 'http://localhost:8081',
@@ -53,4 +54,3 @@ export default defineConfig({
     },
   },
 })
-
