@@ -138,29 +138,7 @@ export class Application {
    */
   private async registerBots(): Promise<void> {
     console.log('🤖 Registrando bots...')
-
-    // Importa e registra os bots dinamicamente
-    const { CoopLuizaBot } = await import('@/bots/CoopLuiza/CoopLuizaBot')
-    const { ChatBot } = await import('@/bots/ChatBot/ChatBot')
-    const { SupplierUploadBot } = await import(
-      '@/bots/SupplierUpload/SupplierUploadBot'
-    )
-    const { TireShopBot } = await import('@/bots/TireShop/TireShopBot')
-    const { AuraBot } = await import('@/bots/Aura/AuraBot')
-
-    BotFactory.registerBot('coopluiza', CoopLuizaBot)
-    BotFactory.registerBot('chat', ChatBot)
-    BotFactory.registerBot('fornecedor-upload', SupplierUploadBot)
-    BotFactory.registerBot('loja-pneus', TireShopBot)
-    BotFactory.registerBot('aura', AuraBot)
-
-    // Aqui você pode registrar mais bots conforme criar
-    // BotFactory.registerBot('coopmetro', CoopMetroBot)
-    // BotFactory.registerBot('btc', BTCBot)
-
-    console.log(
-      `✅ ${BotFactory.getRegisteredBots().length} bot(s) registrado(s)`,
-    )
+    console.log('⚠️ Nenhum bot registrado')
   }
 
   /**
