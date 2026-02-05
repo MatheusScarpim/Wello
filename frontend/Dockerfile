@@ -21,16 +21,11 @@ COPY . .
 
 RUN npm run build:docker
 
-FROM node:${NODE_VERSION}-alpine as final
+FROM nginx:alpine as final
 
-WORKDIR /usr/src/app
+COPY --from=build /usr/src/app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-COPY --from=deps /usr/src/app/node_modules ./node_modules
-COPY --from=build /usr/src/app/dist ./dist
-COPY package.json ./
+EXPOSE 80
 
-EXPOSE 4176
-
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "4176"]
-
-
+CMD ["nginx", "-g", "daemon off;"]

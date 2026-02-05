@@ -27,7 +27,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "4176:4176"
+      - "4176:80"
     depends_on:
       - engine
     networks:
