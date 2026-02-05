@@ -7,6 +7,9 @@ import router from './router'
 import './assets/main.css'
 import { connectSocket } from './services/socket'
 import { initMessageNotifications } from './services/notifications'
+import { registerSW } from 'virtual:pwa-register'
+
+registerSW({ immediate: true })
 
 const app = createApp(App)
 

@@ -9,7 +9,8 @@
       "Bash(pnpm install:*)",
       "Bash(xargs:*)",
       "Bash(docker system prune:*)",
-      "Bash(docker-compose up:*)"
+      "Bash(docker-compose up:*)",
+      "Bash(npx vite build:*)"
     ]
   }
 }
