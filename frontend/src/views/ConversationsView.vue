@@ -286,8 +286,9 @@ onUnmounted(() => {
         />
         <button @click="showCreateModal = true" class="btn-primary">
           <Plus class="w-4 h-4" />
-        Nova Conversa
-      </button>
+          Nova Conversa
+        </button>
+      </div>
     </div>
 
     <!-- Desktop Filters -->
