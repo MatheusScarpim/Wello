@@ -10,7 +10,9 @@ import {
   Play,
   Power,
   PowerOff,
-  ExternalLink
+  ExternalLink,
+  Filter,
+  X
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -43,6 +45,19 @@ const showFormModal = ref(false)
 const editingWebhook = ref<WebhookType | null>(null)
 const deleteConfirm = ref<WebhookType | null>(null)
 const testingId = ref<string | null>(null)
+
+const activeFiltersCount = computed(() => {
+  let count = 0
+  if (search.value) count++
+  if (enabledFilter.value) count++
+  return count
+})
+
+function clearWebhookFilters() {
+  search.value = ''
+  enabledFilter.value = ''
+  fetchWebhooks()
+}
 
 async function fetchWebhooks() {
   isLoading.value = true
@@ -190,23 +205,51 @@ onMounted(fetchWebhooks)
     </div>
 
     <!-- Filters -->
-    <div class="card card-body">
-      <div class="flex flex-col sm:flex-row gap-4">
-        <div class="flex-1 relative">
-          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            v-model="search"
-            @input="fetchWebhooks"
-            type="text"
-            placeholder="Buscar webhooks..."
-            class="input pl-10"
-          />
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50/80 border-b border-gray-100">
+        <div class="flex items-center gap-2 text-gray-600">
+          <Filter class="w-4 h-4" />
+          <span class="text-sm font-semibold">Filtros</span>
+          <span
+            v-if="activeFiltersCount > 0"
+            class="ml-1 w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center"
+          >
+            {{ activeFiltersCount }}
+          </span>
         </div>
-        <select v-model="enabledFilter" @change="fetchWebhooks" class="select w-40">
-          <option value="">Todos</option>
-          <option value="true">Ativos</option>
-          <option value="false">Inativos</option>
-        </select>
+        <button
+          v-if="activeFiltersCount > 0"
+          @click="clearWebhookFilters"
+          class="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1 transition-colors"
+        >
+          <X class="w-3.5 h-3.5" />
+          Limpar filtros
+        </button>
+      </div>
+      <div class="p-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="lg:col-span-2">
+            <label class="label">Buscar</label>
+            <div class="relative">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                v-model="search"
+                @input="fetchWebhooks"
+                type="text"
+                placeholder="Buscar webhooks..."
+                class="input pl-10"
+              />
+            </div>
+          </div>
+          <div>
+            <label class="label">Status</label>
+            <select v-model="enabledFilter" @change="fetchWebhooks" class="select">
+              <option value="">Todos</option>
+              <option value="true">Ativos</option>
+              <option value="false">Inativos</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
 

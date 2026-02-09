@@ -13,6 +13,8 @@ import {
   Clock,
   Tag as TagIcon,
   Smartphone,
+  Filter,
+  X,
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -91,6 +93,22 @@ const filteredQueue = computed(() => {
 
   return items
 })
+
+const activeFiltersCount = computed(() => {
+  let count = 0
+  if (searchQuery.value) count++
+  if (selectedTags.value.length > 0) count++
+  if (selectedInstance.value) count++
+  if (activeFilter.value !== 'all') count++
+  return count
+})
+
+function clearAssumeFilters() {
+  searchQuery.value = ''
+  selectedTags.value = []
+  selectedInstance.value = null
+  activeFilter.value = 'all'
+}
 
 const waitingCount = computed(() => queue.value.length)
 
@@ -279,78 +297,105 @@ onUnmounted(() => {
     </div>
 
     <!-- Filtros e busca -->
-    <div class="space-y-3">
-      <!-- Filter Tabs melhorados -->
-      <div class="flex gap-1 bg-gray-100 rounded-xl p-1.5 shadow-inner">
-        <button
-          v-for="tab in filterTabs"
-          :key="tab.key"
-          @click="activeFilter = tab.key"
-          class="flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200"
-          :class="
-            activeFilter === tab.key
-              ? 'bg-white text-primary-700 shadow-md'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          "
-        >
-          {{ tab.label }}
-        </button>
-      </div>
-
-      <!-- Search melhorado -->
-      <div class="relative">
-        <Search class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Buscar por nome ou telefone..."
-          class="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
-        />
-      </div>
-
-      <!-- Tags Filter melhorado -->
-      <div v-if="availableTags.length > 0" class="flex flex-wrap gap-2">
-        <button
-          v-for="tag in availableTags"
-          :key="tag._id"
-          @click="toggleTagFilter(tag.name)"
-          class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 shadow-sm"
-          :class="selectedTags.includes(tag.name)
-            ? 'text-white shadow-md scale-105'
-            : 'bg-white text-gray-700 hover:shadow-md border border-gray-200'"
-          :style="selectedTags.includes(tag.name) ? { backgroundColor: tag.color } : {}"
-        >
-          <div
-            v-if="!selectedTags.includes(tag.name)"
-            class="w-3 h-3 rounded-full"
-            :style="{ backgroundColor: tag.color }"
-          />
-          <TagIcon v-else class="w-3.5 h-3.5" />
-          {{ tag.name }}
-        </button>
-      </div>
-
-      <!-- Instance Filter -->
-      <div v-if="availableInstances.length > 1" class="flex flex-wrap gap-2">
-        <span class="flex items-center gap-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide mr-1">
-          <Smartphone class="w-3.5 h-3.5" />
-          Instância:
-        </span>
-        <button
-          v-for="instance in availableInstances"
-          :key="instance.id"
-          @click="selectInstance(instance.name)"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200"
-          :class="selectedInstance === instance.name
-            ? 'bg-emerald-500 text-white shadow-md scale-105'
-            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'"
-        >
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50/80 border-b border-gray-100">
+        <div class="flex items-center gap-2 text-gray-600">
+          <Filter class="w-4 h-4" />
+          <span class="text-sm font-semibold">Filtros</span>
           <span
-            class="w-2 h-2 rounded-full"
-            :class="instance.connected ? 'bg-emerald-400' : 'bg-gray-300'"
-          />
-          {{ instance.name }}
+            v-if="activeFiltersCount > 0"
+            class="ml-1 w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center"
+          >
+            {{ activeFiltersCount }}
+          </span>
+        </div>
+        <button
+          v-if="activeFiltersCount > 0"
+          @click="clearAssumeFilters"
+          class="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1 transition-colors"
+        >
+          <X class="w-3.5 h-3.5" />
+          Limpar filtros
         </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <!-- Filter Tabs -->
+        <div class="flex gap-1 bg-gray-100 rounded-xl p-1.5">
+          <button
+            v-for="tab in filterTabs"
+            :key="tab.key"
+            @click="activeFilter = tab.key"
+            class="flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200"
+            :class="
+              activeFilter === tab.key
+                ? 'bg-white text-primary-700 shadow-md'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            "
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <!-- Search -->
+        <div>
+          <label class="label">Buscar</label>
+          <div class="relative">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Buscar por nome ou telefone..."
+              class="input pl-10"
+            />
+          </div>
+        </div>
+
+        <!-- Tags Filter -->
+        <div v-if="availableTags.length > 0" class="pt-3 border-t border-gray-100">
+          <label class="label mb-2">Tags</label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="tag in availableTags"
+              :key="tag._id"
+              @click="toggleTagFilter(tag.name)"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200"
+              :class="selectedTags.includes(tag.name)
+                ? 'text-white shadow-sm'
+                : 'bg-white text-gray-700 hover:shadow-sm border border-gray-200'"
+              :style="selectedTags.includes(tag.name) ? { backgroundColor: tag.color } : {}"
+            >
+              <div
+                v-if="!selectedTags.includes(tag.name)"
+                class="w-3 h-3 rounded-full"
+                :style="{ backgroundColor: tag.color }"
+              />
+              <TagIcon v-else class="w-3.5 h-3.5" />
+              {{ tag.name }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Instance Filter -->
+        <div v-if="availableInstances.length > 1" class="pt-3 border-t border-gray-100">
+          <label class="label mb-2">Instância</label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="instance in availableInstances"
+              :key="instance.id"
+              @click="selectInstance(instance.name)"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200"
+              :class="selectedInstance === instance.name
+                ? 'bg-emerald-500 text-white shadow-sm'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'"
+            >
+              <span
+                class="w-2 h-2 rounded-full"
+                :class="instance.connected ? 'bg-emerald-400' : 'bg-gray-300'"
+              />
+              {{ instance.name }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 

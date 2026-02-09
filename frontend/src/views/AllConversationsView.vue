@@ -18,7 +18,8 @@ import {
   Archive,
   ArchiveRestore,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Filter
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import Pagination from '@/components/ui/Pagination.vue'
@@ -448,13 +449,32 @@ onMounted(() => {
     </div>
 
     <!-- Filters Card -->
-    <div class="card card-body space-y-4">
-      <!-- First Row: Period and Search -->
-      <div class="flex flex-col lg:flex-row gap-4">
-        <!-- Period Filter -->
-        <div class="flex flex-col sm:flex-row gap-4 items-end flex-1">
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50/80 border-b border-gray-100">
+        <div class="flex items-center gap-2 text-gray-600">
+          <Filter class="w-4 h-4" />
+          <span class="text-sm font-semibold">Filtros</span>
+          <span
+            v-if="activeFiltersCount > 0"
+            class="ml-1 w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center"
+          >
+            {{ activeFiltersCount }}
+          </span>
+        </div>
+        <button
+          v-if="activeFiltersCount > 0"
+          @click="clearFilters"
+          class="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1 transition-colors"
+        >
+          <X class="w-3.5 h-3.5" />
+          Limpar filtros
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <!-- Row 1: Period + Search -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div>
-            <label class="label">Periodo</label>
+            <label class="label">Período</label>
             <select v-model="selectedPeriod" class="select">
               <option v-for="opt in periodOptions" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
@@ -464,22 +484,38 @@ onMounted(() => {
 
           <template v-if="selectedPeriod === 'custom'">
             <div>
-              <label class="label">Data Inicio</label>
+              <label class="label">Data Início</label>
               <input v-model="customStartDate" type="date" class="input" />
             </div>
             <div>
               <label class="label">Data Fim</label>
               <input v-model="customEndDate" type="date" class="input" />
             </div>
-            <button @click="applyCustomPeriod" class="btn-primary">
-              <Calendar class="w-4 h-4" />
-              Aplicar
-            </button>
+            <div>
+              <button @click="applyCustomPeriod" class="btn-primary w-full">
+                <Calendar class="w-4 h-4" />
+                Aplicar
+              </button>
+            </div>
           </template>
+
+          <div v-if="selectedPeriod !== 'custom'" class="sm:col-span-1 lg:col-span-3">
+            <label class="label">Buscar</label>
+            <div class="relative">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                v-model="searchQuery"
+                @input="handleSearch"
+                type="text"
+                placeholder="Nome ou número..."
+                class="input pl-10"
+              />
+            </div>
+          </div>
         </div>
 
-        <!-- Search -->
-        <div class="flex-1 max-w-md">
+        <!-- Row 1.5: Search when custom period is active -->
+        <div v-if="selectedPeriod === 'custom'">
           <label class="label">Buscar</label>
           <div class="relative">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -487,90 +523,75 @@ onMounted(() => {
               v-model="searchQuery"
               @input="handleSearch"
               type="text"
-              placeholder="Nome ou numero..."
+              placeholder="Nome ou número..."
               class="input pl-10"
             />
           </div>
         </div>
-      </div>
 
-      <!-- Second Row: More Filters -->
-      <div class="flex flex-col sm:flex-row gap-4 items-end">
-        <!-- Status Filter -->
-        <div>
-          <label class="label">Status</label>
-          <select v-model="selectedStatus" class="select w-40">
-            <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-
-        <!-- Operator Filter -->
-        <div>
-          <label class="label">Operador</label>
-          <select v-model="selectedOperator" class="select w-48">
-            <option value="">Todos Operadores</option>
-            <option v-for="op in operators" :key="op._id" :value="op._id">
-              {{ op.name }}
-            </option>
-          </select>
-        </div>
-
-        <!-- Filter checkboxes -->
-        <div class="flex items-center gap-4">
-          <div class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="showOnlyArchived"
-              v-model="showOnlyArchived"
-              class="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <label for="showOnlyArchived" class="text-sm text-gray-700">Somente arquivadas</label>
+        <!-- Row 2: Status + Operator + Checkboxes -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end pt-3 border-t border-gray-100">
+          <div>
+            <label class="label">Status</label>
+            <select v-model="selectedStatus" class="select">
+              <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
           </div>
-          <div class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="hideFinalized"
-              v-model="hideFinalized"
-              class="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <label for="hideFinalized" class="text-sm text-gray-700">Ocultar finalizadas</label>
+
+          <div>
+            <label class="label">Operador</label>
+            <select v-model="selectedOperator" class="select">
+              <option value="">Todos Operadores</option>
+              <option v-for="op in operators" :key="op._id" :value="op._id">
+                {{ op.name }}
+              </option>
+            </select>
+          </div>
+
+          <div class="sm:col-span-2 flex items-end gap-5 pb-1">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                v-model="showOnlyArchived"
+                class="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span class="text-sm text-gray-700">Somente arquivadas</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                v-model="hideFinalized"
+                class="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span class="text-sm text-gray-700">Ocultar finalizadas</span>
+            </label>
           </div>
         </div>
 
-        <!-- Clear Filters -->
-        <button
-          v-if="activeFiltersCount > 0"
-          @click="clearFilters"
-          class="btn-ghost text-gray-500 hover:text-gray-700"
-        >
-          <X class="w-4 h-4" />
-          Limpar filtros ({{ activeFiltersCount }})
-        </button>
-      </div>
-
-      <!-- Tags Filter -->
-      <div v-if="availableTags.length > 0">
-        <label class="label mb-2">Tags</label>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="tag in availableTags"
-            :key="tag._id"
-            @click="toggleTag(tag.name)"
-            class="px-3 py-1.5 rounded-full text-sm font-medium transition-all"
-            :class="selectedTags.includes(tag.name)
-              ? 'ring-2 ring-offset-2 ring-gray-400'
-              : 'opacity-70 hover:opacity-100'"
-            :style="{
-              backgroundColor: tag.color + '20',
-              color: tag.color,
-              borderColor: tag.color
-            }"
-          >
-            <TagIcon class="w-3 h-3 inline-block mr-1" />
-            {{ tag.name }}
-          </button>
+        <!-- Row 3: Tags -->
+        <div v-if="availableTags.length > 0" class="pt-3 border-t border-gray-100">
+          <label class="label mb-2">Tags</label>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="tag in availableTags"
+              :key="tag._id"
+              @click="toggleTag(tag.name)"
+              class="px-3 py-1.5 rounded-full text-sm font-medium transition-all"
+              :class="selectedTags.includes(tag.name)
+                ? 'ring-2 ring-offset-2 ring-gray-400'
+                : 'opacity-70 hover:opacity-100'"
+              :style="{
+                backgroundColor: tag.color + '20',
+                color: tag.color,
+                borderColor: tag.color
+              }"
+            >
+              <TagIcon class="w-3 h-3 inline-block mr-1" />
+              {{ tag.name }}
+            </button>
+          </div>
         </div>
       </div>
     </div>

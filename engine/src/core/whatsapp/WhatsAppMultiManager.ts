@@ -6,6 +6,8 @@ import * as path from 'path'
 import whatsappInstanceRepository, {
   InstanceStatus,
   IWhatsAppInstance,
+  InstanceConnectionType,
+  MetaInstanceConfig,
   InstanceAutomaticMessages,
 } from '../../api/repositories/WhatsAppInstanceRepository'
 import whatsappSessionRepository from '../../api/repositories/WhatsAppSessionRepository'
@@ -20,6 +22,7 @@ export interface InstanceInfo {
   id: string
   name: string
   sessionName: string
+  connectionType?: InstanceConnectionType
   status: InstanceStatus
   connected: boolean
   authenticated: boolean
@@ -30,6 +33,9 @@ export interface InstanceInfo {
   botEnabled?: boolean
   botId?: string | null
   automaticMessages?: InstanceAutomaticMessages
+  metaConfig?: MetaInstanceConfig
+  fairDistributionEnabled?: boolean
+  departmentIds?: string[]
 }
 
 interface InstanceData {
@@ -100,6 +106,8 @@ class WhatsAppMultiManager extends EventEmitter {
    */
   public async createInstance(data: {
     name: string
+    connectionType?: InstanceConnectionType
+    metaConfig?: MetaInstanceConfig
     isDefault?: boolean
     autoConnect?: boolean
     webhookUrl?: string
@@ -113,6 +121,7 @@ class WhatsAppMultiManager extends EventEmitter {
     const instance = await whatsappInstanceRepository.createInstance({
       name: data.name,
       sessionName,
+      connectionType: data.connectionType || 'wppconnect',
       status: 'disconnected',
       isDefault: data.isDefault || false,
       autoConnect: data.autoConnect ?? true,
@@ -121,6 +130,7 @@ class WhatsAppMultiManager extends EventEmitter {
       fairDistributionEnabled: data.fairDistributionEnabled ?? false,
       botEnabled: data.botEnabled ?? true,
       botId: data.botId ?? null,
+      metaConfig: data.metaConfig,
     })
 
     return instance
@@ -138,6 +148,18 @@ class WhatsAppMultiManager extends EventEmitter {
       await whatsappInstanceRepository.findBySessionName(sessionName)
     if (!config) {
       throw new Error(`Instância ${sessionName} não encontrada`)
+    }
+
+    if (config.connectionType === 'meta_official') {
+      const configured =
+        !!config.metaConfig?.enabled &&
+        !!config.metaConfig?.accessToken &&
+        (!!config.metaConfig?.phoneNumberId || !!config.metaConfig?.instagramAccountId)
+      await whatsappInstanceRepository.updateStatus(
+        sessionName,
+        configured ? 'connected' : 'disconnected',
+      )
+      return
     }
 
     let instanceData = this.instances.get(sessionName)
@@ -191,12 +213,9 @@ class WhatsAppMultiManager extends EventEmitter {
     )
     await this.cleanupStaleLocks(sessionName)
 
-    // Mata processos Chromium órfãos
-    await this.killOrphanChromiumProcesses()
-
-    // Aguarda para garantir que tudo foi limpo
+    // cleanupStaleLocks já faz limpeza de processos da sessão atual
     console.log(`🧹 [${config.name}] Aguardando limpeza finalizar...`)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
 
     // Inicializa ou atualiza dados da instância
     instanceData = {
@@ -358,7 +377,7 @@ class WhatsAppMultiManager extends EventEmitter {
     )
 
     // Mata todos os processos Chromium PRIMEIRO
-    await this.killOrphanChromiumProcesses()
+    await this.killOrphanChromiumProcesses(sessionName)
 
     // Aguarda processos morrerem
     await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -472,7 +491,7 @@ class WhatsAppMultiManager extends EventEmitter {
     }
 
     // Tenta matar processos Chrome órfãos (Linux/Docker)
-    await this.killOrphanChromiumProcesses()
+    await this.killOrphanChromiumProcesses(sessionName)
   }
 
   /**
@@ -506,23 +525,48 @@ class WhatsAppMultiManager extends EventEmitter {
   /**
    * Mata processos Chromium órfãos
    */
-  private async killOrphanChromiumProcesses(): Promise<void> {
+  private async killOrphanChromiumProcesses(
+    sessionName?: string,
+  ): Promise<void> {
     try {
       const { execSync } = require('child_process')
 
-      console.log('🧹 Matando processos Chromium órfãos...')
+      console.log(
+        sessionName
+          ? `🧹 Matando processos Chromium órfãos da sessão ${sessionName}...`
+          : '🧹 Matando processos Chromium órfãos...',
+      )
+
+      const isWindows = process.platform === 'win32'
+      const sessionPattern = sessionName
+        ? sessionName.replace(/[^\w-]/g, '')
+        : undefined
+
+      // Em Windows evitamos limpeza global para não matar navegadores não relacionados.
+      if (isWindows && !sessionPattern) {
+        console.log(
+          '⚠️ Limpeza global de processos Chromium ignorada no Windows.',
+        )
+        return
+      }
 
       // Tenta diferentes comandos para matar processos (Linux/Docker)
-      const commands = [
-        'pkill -9 -f "chromium" 2>/dev/null || true',
-        'pkill -9 -f "chrome" 2>/dev/null || true',
-        'pkill -9 -f "puppeteer" 2>/dev/null || true',
-        'pkill -9 -f "headless" 2>/dev/null || true',
-        'killall -9 chromium chromium-browser chrome google-chrome 2>/dev/null || true',
-        // Mata por padrão de diretório do userDataDir
-        'pkill -9 -f "user-data-dir.*tokens" 2>/dev/null || true',
-        'pkill -9 -f "browser-data" 2>/dev/null || true',
-      ]
+      const commands = sessionPattern
+        ? [
+            `pkill -9 -f "user-data-dir.*${sessionPattern}.*/browser-data" 2>/dev/null || true`,
+            `pkill -9 -f "${sessionPattern}.*/browser-data" 2>/dev/null || true`,
+            `pkill -9 -f "${sessionPattern}" 2>/dev/null || true`,
+          ]
+        : [
+            'pkill -9 -f "chromium" 2>/dev/null || true',
+            'pkill -9 -f "chrome" 2>/dev/null || true',
+            'pkill -9 -f "puppeteer" 2>/dev/null || true',
+            'pkill -9 -f "headless" 2>/dev/null || true',
+            'killall -9 chromium chromium-browser chrome google-chrome 2>/dev/null || true',
+            // Mata por padrão de diretório do userDataDir
+            'pkill -9 -f "user-data-dir.*tokens" 2>/dev/null || true',
+            'pkill -9 -f "browser-data" 2>/dev/null || true',
+          ]
 
       for (const cmd of commands) {
         try {
@@ -532,7 +576,11 @@ class WhatsAppMultiManager extends EventEmitter {
         }
       }
 
-      console.log('🧹 Processos Chromium órfãos encerrados')
+      console.log(
+        sessionName
+          ? `🧹 Processos Chromium da sessão ${sessionName} encerrados`
+          : '🧹 Processos Chromium órfãos encerrados',
+      )
       // Aguarda um pouco para garantir que foram encerrados
       await new Promise((resolve) => setTimeout(resolve, 1000))
     } catch (e) {
@@ -817,10 +865,18 @@ class WhatsAppMultiManager extends EventEmitter {
 
     return dbInstances.map((inst) => {
       const data = this.instances.get(inst.sessionName)
+      const isMetaOfficial = inst.connectionType === 'meta_official'
+      const isMetaConfigured =
+        isMetaOfficial &&
+        !!inst.metaConfig?.enabled &&
+        !!inst.metaConfig?.accessToken &&
+        (!!inst.metaConfig?.phoneNumberId || !!inst.metaConfig?.instagramAccountId)
 
       // Determina o status real baseado na autenticação
       let status: InstanceStatus = inst.status
-      if (data) {
+      if (isMetaConfigured) {
+        status = 'connected'
+      } else if (data) {
         if (data.wasConnected && data.client) {
           status = 'connected'
         } else if (data.qrCode) {
@@ -834,19 +890,24 @@ class WhatsAppMultiManager extends EventEmitter {
         id: inst._id!.toString(),
         name: inst.name,
         sessionName: inst.sessionName,
+        connectionType: inst.connectionType || 'wppconnect',
         status,
-        connected:
-          data?.wasConnected &&
-          data?.client !== null &&
-          data?.client !== undefined,
-        authenticated: data?.wasConnected || false,
-        qrCode: this.getQrCode(inst.sessionName),
+        connected: isMetaConfigured
+          ? true
+          : !!(
+              data?.wasConnected &&
+              data?.client !== null &&
+              data?.client !== undefined
+            ),
+        authenticated: isMetaConfigured ? true : data?.wasConnected || false,
+        qrCode: isMetaOfficial ? null : this.getQrCode(inst.sessionName),
         phoneNumber: inst.phoneNumber,
         profileName: inst.profileName,
         isDefault: inst.isDefault,
         botEnabled: inst.botEnabled ?? true,
         botId: inst.botId ?? null,
         automaticMessages: inst.automaticMessages,
+        metaConfig: inst.metaConfig,
         fairDistributionEnabled: inst.fairDistributionEnabled ?? false,
         departmentIds: inst.departmentIds,
       }
@@ -863,10 +924,18 @@ class WhatsAppMultiManager extends EventEmitter {
     if (!inst) return null
 
     const data = this.instances.get(sessionName)
+    const isMetaOfficial = inst.connectionType === 'meta_official'
+    const isMetaConfigured =
+      isMetaOfficial &&
+      !!inst.metaConfig?.enabled &&
+      !!inst.metaConfig?.accessToken &&
+      (!!inst.metaConfig?.phoneNumberId || !!inst.metaConfig?.instagramAccountId)
 
     // Determina o status real baseado na autenticação
     let status: InstanceStatus = inst.status
-    if (data) {
+    if (isMetaConfigured) {
+      status = 'connected'
+    } else if (data) {
       if (data.wasConnected && data.client) {
         status = 'connected'
       } else if (data.qrCode) {
@@ -880,19 +949,24 @@ class WhatsAppMultiManager extends EventEmitter {
       id: inst._id!.toString(),
       name: inst.name,
       sessionName: inst.sessionName,
+      connectionType: inst.connectionType || 'wppconnect',
       status,
-      connected:
-        data?.wasConnected &&
-        data?.client !== null &&
-        data?.client !== undefined,
-      authenticated: data?.wasConnected || false,
-      qrCode: this.getQrCode(sessionName),
+      connected: isMetaConfigured
+        ? true
+        : !!(
+            data?.wasConnected &&
+            data?.client !== null &&
+            data?.client !== undefined
+          ),
+      authenticated: isMetaConfigured ? true : data?.wasConnected || false,
+      qrCode: isMetaOfficial ? null : this.getQrCode(sessionName),
       phoneNumber: inst.phoneNumber,
       profileName: inst.profileName,
       isDefault: inst.isDefault,
       botEnabled: inst.botEnabled ?? true,
       botId: inst.botId ?? null,
       automaticMessages: inst.automaticMessages,
+      metaConfig: inst.metaConfig,
     }
   }
 

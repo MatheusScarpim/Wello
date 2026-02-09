@@ -109,7 +109,7 @@ const navGroups = computed<NavGroup[]>(() => {
         {
           title: 'Sistema',
           items: [
-            { name: 'WhatsApp', path: '/whatsapp', icon: Smartphone },
+            { name: 'Instancias', path: '/whatsapp', icon: Smartphone },
             ...(whitelabelStore.isFeatureEnabled('enableStorage') ? [{ name: 'Storage', path: '/storage', icon: HardDrive }] : []),
             // ...(whitelabelStore.isFeatureEnabled('enableExpenses') ? [{ name: 'Despesas', path: '/expenses', icon: Receipt }] : []),
             { name: 'Finalizações', path: '/finalizations', icon: ClipboardList },
@@ -266,4 +266,5 @@ const sidebarClasses = computed(() => {
     </div>
   </aside>
 </template>
+
 

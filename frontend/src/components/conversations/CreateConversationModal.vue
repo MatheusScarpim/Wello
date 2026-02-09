@@ -81,7 +81,8 @@ async function handleSubmit() {
           <label class="label">Provider</label>
           <select v-model="form.provider" class="select">
             <option value="whatsapp">WhatsApp</option>
-            <option value="meta">WhatsApp Business (Meta)</option>
+            <option value="meta_whatsapp">WhatsApp Business (Meta)</option>
+            <option value="instagram">Instagram Direct</option>
           </select>
         </div>
 

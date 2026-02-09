@@ -16,7 +16,9 @@ import {
   Send,
   Inbox,
   Clock,
-  Eye
+  Eye,
+  Filter,
+  X
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import Pagination from '@/components/ui/Pagination.vue'
@@ -78,6 +80,25 @@ const finalizationOptions = computed<FinalizationTypeSummary[]>(() => {
   })
   return Array.from(seen.values())
 })
+
+const activeFiltersCount = computed(() => {
+  let count = 0
+  if (selectedOperator.value) count++
+  if (selectedFinalizationType.value) count++
+  if (selectedFinalizationId.value) count++
+  return count
+})
+
+function clearMetricFilters() {
+  selectedOperator.value = ''
+  selectedFinalizationType.value = ''
+  selectedFinalizationId.value = ''
+  selectedPeriod.value = 'week'
+  customStartDate.value = ''
+  customEndDate.value = ''
+  pagination.value.page = 1
+  fetchMetrics()
+}
 
 async function fetchMetrics() {
   isLoading.value = true
@@ -334,73 +355,99 @@ onMounted(fetchMetrics)
     </div>
 
     <!-- Filters -->
-    <div class="card card-body space-y-4">
-      <div class="flex flex-col sm:flex-row gap-4 items-end">
-        <div>
-          <label class="label">Período</label>
-          <select v-model="selectedPeriod" class="select">
-            <option v-for="opt in periodOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-
-        <template v-if="selectedPeriod === 'custom'">
-          <div>
-            <label class="label">Data Início</label>
-            <input v-model="customStartDate" type="date" class="input" />
-          </div>
-          <div>
-            <label class="label">Data Fim</label>
-            <input v-model="customEndDate" type="date" class="input" />
-          </div>
-          <button @click="applyCustomPeriod" class="btn-primary">
-            <Calendar class="w-4 h-4" />
-            Aplicar
-          </button>
-        </template>
-      </div>
-
-      <div class="grid gap-4 md:grid-cols-3">
-        <div>
-          <label class="label">Operador</label>
-          <select v-model="selectedOperator" class="select w-full">
-            <option value="">Todos Operadores</option>
-            <option
-              v-for="op in finalizationMetrics?.byOperator || []"
-              :key="op.operatorId"
-              :value="op.operatorId"
-            >
-              {{ op.operatorName || 'Desconhecido' }}
-            </option>
-          </select>
-        </div>
-
-        <div>
-          <label class="label">Tipo</label>
-          <select v-model="selectedFinalizationType" class="select w-full">
-            <option value="">Todos Tipos</option>
-            <option value="gain">Ganhos</option>
-            <option value="loss">Perdas</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="label">Finalização</label>
-          <select
-            v-model="selectedFinalizationId"
-            class="select w-full"
-            :disabled="finalizationOptions.length === 0"
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50/80 border-b border-gray-100">
+        <div class="flex items-center gap-2 text-gray-600">
+          <Filter class="w-4 h-4" />
+          <span class="text-sm font-semibold">Filtros</span>
+          <span
+            v-if="activeFiltersCount > 0"
+            class="ml-1 w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center"
           >
-            <option value="">Todas Finalizações</option>
-            <option
-              v-for="entry in finalizationOptions"
-              :key="entry.finalizationId"
-              :value="entry.finalizationId"
+            {{ activeFiltersCount }}
+          </span>
+        </div>
+        <button
+          v-if="activeFiltersCount > 0"
+          @click="clearMetricFilters"
+          class="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1 transition-colors"
+        >
+          <X class="w-3.5 h-3.5" />
+          Limpar filtros
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <!-- Period Row -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div>
+            <label class="label">Período</label>
+            <select v-model="selectedPeriod" class="select">
+              <option v-for="opt in periodOptions" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+
+          <template v-if="selectedPeriod === 'custom'">
+            <div>
+              <label class="label">Data Início</label>
+              <input v-model="customStartDate" type="date" class="input" />
+            </div>
+            <div>
+              <label class="label">Data Fim</label>
+              <input v-model="customEndDate" type="date" class="input" />
+            </div>
+            <div>
+              <button @click="applyCustomPeriod" class="btn-primary w-full">
+                <Calendar class="w-4 h-4" />
+                Aplicar
+              </button>
+            </div>
+          </template>
+        </div>
+
+        <!-- Detailed Filters Row -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-gray-100">
+          <div>
+            <label class="label">Operador</label>
+            <select v-model="selectedOperator" class="select">
+              <option value="">Todos Operadores</option>
+              <option
+                v-for="op in finalizationMetrics?.byOperator || []"
+                :key="op.operatorId"
+                :value="op.operatorId"
+              >
+                {{ op.operatorName || 'Desconhecido' }}
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label class="label">Tipo</label>
+            <select v-model="selectedFinalizationType" class="select">
+              <option value="">Todos Tipos</option>
+              <option value="gain">Ganhos</option>
+              <option value="loss">Perdas</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="label">Finalização</label>
+            <select
+              v-model="selectedFinalizationId"
+              class="select"
+              :disabled="finalizationOptions.length === 0"
             >
-              {{ entry.finalizationName || entry.finalizationId || 'Sem nome' }}
-            </option>
-          </select>
+              <option value="">Todas Finalizações</option>
+              <option
+                v-for="entry in finalizationOptions"
+                :key="entry.finalizationId"
+                :value="entry.finalizationId"
+              >
+                {{ entry.finalizationName || entry.finalizationId || 'Sem nome' }}
+              </option>
+            </select>
+          </div>
         </div>
       </div>
     </div>

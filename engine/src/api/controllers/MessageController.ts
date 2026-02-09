@@ -125,7 +125,13 @@ export class MessageController extends BaseController {
         metaPhoneNumberId,
         metaApiVersion,
         metaBaseUrl,
+        instagramAccessToken,
+        instagramAccountId,
+        instagramApiVersion,
+        instagramBaseUrl,
       } = req.body
+      const normalizedProvider =
+        provider === 'meta' ? 'meta_whatsapp' : provider
 
       // Se tiver quotedMessageId, busca o messageId original do WhatsApp
       let whatsappQuotedMessageId: string | undefined
@@ -153,7 +159,7 @@ export class MessageController extends BaseController {
 
       const params = {
         to,
-        provider,
+        provider: normalizedProvider,
         message,
         type,
         mediaUrl,
@@ -179,6 +185,10 @@ export class MessageController extends BaseController {
         metaPhoneNumberId,
         metaApiVersion,
         metaBaseUrl,
+        instagramAccessToken,
+        instagramAccountId,
+        instagramApiVersion,
+        instagramBaseUrl,
         mediaStorage: req.body.mediaStorage,
       }
 
@@ -202,7 +212,7 @@ export class MessageController extends BaseController {
           {
             queued: true,
             to,
-            provider,
+            provider: normalizedProvider,
             type,
           },
           'Mensagem enfileirada para envio',
@@ -216,14 +226,14 @@ export class MessageController extends BaseController {
         // Busca a conversa para obter o sessionName (instância do WhatsApp)
         const conversation = await this.messageService.getOrCreateConversation(
           to,
-          provider,
+          normalizedProvider,
         )
         if (conversation?.sessionName) {
           messagingParams.sessionName = conversation.sessionName
           console.log(`📱 Usando instância: ${conversation.sessionName}`)
         }
 
-        console.log(`📤 Enviando mensagem para ${to} via ${provider}...`)
+        console.log(`📤 Enviando mensagem para ${to} via ${normalizedProvider}...`)
         const result = await MessagingService.sendMessage(messagingParams)
 
         if (!result.success) {

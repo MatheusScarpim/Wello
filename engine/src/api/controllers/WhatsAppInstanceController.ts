@@ -1,6 +1,8 @@
 import { Request, Response } from 'express'
 import { ObjectId } from 'mongodb'
 
+import InstagramManager from '../../core/providers/InstagramManager'
+import MetaManager from '../../core/providers/MetaManager'
 import WhatsAppMultiManager from '../../core/whatsapp/WhatsAppMultiManager'
 import whatsappInstanceRepository from '../repositories/WhatsAppInstanceRepository'
 import { BaseController } from './BaseController'
@@ -52,6 +54,8 @@ class WhatsAppInstanceController extends BaseController {
     try {
       const {
         name,
+        connectionType,
+        metaConfig,
         isDefault,
         autoConnect,
         webhookUrl,
@@ -66,6 +70,8 @@ class WhatsAppInstanceController extends BaseController {
 
       const instance = await WhatsAppMultiManager.createInstance({
         name,
+        connectionType,
+        metaConfig,
         isDefault,
         autoConnect,
         webhookUrl,
@@ -87,6 +93,8 @@ class WhatsAppInstanceController extends BaseController {
       const { id } = req.params
       const {
         name,
+        connectionType,
+        metaConfig,
         autoConnect,
         webhookUrl,
         departmentIds,
@@ -112,6 +120,18 @@ class WhatsAppInstanceController extends BaseController {
         {
           $set: {
             ...(name && { name }),
+            ...(connectionType !== undefined && { connectionType }),
+            ...(metaConfig !== undefined && {
+              metaConfig: {
+                enabled: !!metaConfig?.enabled,
+                accessToken: metaConfig?.accessToken,
+                phoneNumberId: metaConfig?.phoneNumberId,
+                instagramAccountId: metaConfig?.instagramAccountId,
+                apiVersion: metaConfig?.apiVersion || process.env.META_API_VERSION || 'v17.0',
+                baseUrl:
+                  metaConfig?.baseUrl || process.env.URL_META || 'https://graph.facebook.com',
+              },
+            }),
             ...(autoConnect !== undefined && { autoConnect }),
             ...(webhookUrl !== undefined && { webhookUrl }),
             ...(departmentIds && { departmentIds }),
@@ -181,6 +201,81 @@ class WhatsAppInstanceController extends BaseController {
         return
       }
 
+      if (instance.connectionType === 'meta_official') {
+        const hasAccessToken = !!instance.metaConfig?.accessToken
+        const hasWhatsAppId = !!instance.metaConfig?.phoneNumberId
+        const hasInstagramId = !!instance.metaConfig?.instagramAccountId
+        const configured =
+          !!instance.metaConfig?.enabled &&
+          hasAccessToken &&
+          (hasWhatsAppId || hasInstagramId)
+
+        if (!configured) {
+          this.sendError(
+            res,
+            'Instancia Meta oficial sem configuracao completa (token e phoneNumberId ou instagramAccountId)',
+            400,
+          )
+          return
+        }
+
+        let profileName = instance.profileName
+        let phoneNumber = instance.phoneNumber
+        let validationError: string | undefined
+
+        if (hasWhatsAppId) {
+          const validation = await MetaManager.validateCredentials({
+            accessToken: instance.metaConfig?.accessToken,
+            phoneNumberId: instance.metaConfig?.phoneNumberId,
+            apiVersion: instance.metaConfig?.apiVersion,
+            baseUrl: instance.metaConfig?.baseUrl,
+          })
+          if (!validation.valid) {
+            validationError = validation.error || 'erro desconhecido'
+          } else {
+            profileName = validation.verifiedName || profileName
+            phoneNumber = validation.displayPhoneNumber || phoneNumber
+          }
+        } else if (hasInstagramId) {
+          const validation = await InstagramManager.validateCredentials({
+            accessToken: instance.metaConfig?.accessToken,
+            instagramAccountId: instance.metaConfig?.instagramAccountId,
+            apiVersion: instance.metaConfig?.apiVersion,
+            baseUrl: instance.metaConfig?.baseUrl,
+          })
+          if (!validation.valid) {
+            validationError = validation.error || 'erro desconhecido'
+          } else {
+            profileName = validation.username || profileName
+          }
+        }
+
+        if (validationError) {
+          this.sendError(
+            res,
+            `Falha ao validar credenciais da Meta: ${validationError}`,
+            400,
+          )
+          return
+        }
+
+        await whatsappInstanceRepository.updateStatus(instance.sessionName, 'connected', {
+          phoneNumber,
+          profileName,
+        })
+        this.sendSuccess(
+          res,
+          {
+            id: instance._id?.toString(),
+            name: instance.name,
+            sessionName: instance.sessionName,
+            status: 'connected',
+          },
+          'Instancia Meta oficial configurada',
+        )
+        return
+      }
+
       // Primeiro tenta desconectar/limpar sessao existente
       try {
         await WhatsAppMultiManager.disconnectInstance(instance.sessionName)
@@ -223,51 +318,62 @@ class WhatsAppInstanceController extends BaseController {
       const { id } = req.params
 
       if (!ObjectId.isValid(id)) {
-        this.sendError(res, 'ID inválido', 400)
+        this.sendError(res, 'ID invalido', 400)
         return
       }
 
       const instance = await whatsappInstanceRepository.findById(id)
       if (!instance) {
-        this.sendError(res, 'Instância não encontrada', 404)
+        this.sendError(res, 'Instancia nao encontrada', 404)
+        return
+      }
+
+      if (instance.connectionType === 'meta_official') {
+        await whatsappInstanceRepository.updateStatus(instance.sessionName, 'disconnected')
+        this.sendSuccess(res, null, 'Instancia Meta oficial marcada como desconectada')
         return
       }
 
       await WhatsAppMultiManager.disconnectInstance(instance.sessionName)
 
-      this.sendSuccess(res, null, 'Instância desconectada')
+      this.sendSuccess(res, null, 'Instancia desconectada')
     } catch (error) {
       this.sendInternalError(res, error as Error)
     }
   }
 
   /**
-   * Obtém QR Code de uma instância
+   * Obtem QR Code de uma instancia
    */
   async getQrCode(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params
 
       if (!ObjectId.isValid(id)) {
-        this.sendError(res, 'ID inválido', 400)
+        this.sendError(res, 'ID invalido', 400)
         return
       }
 
       const instance = await whatsappInstanceRepository.findById(id)
       if (!instance) {
-        this.sendError(res, 'Instância não encontrada', 404)
+        this.sendError(res, 'Instancia nao encontrada', 404)
         return
       }
 
-      console.log(
-        `📱 API getQrCode - Instance ID: ${id}, SessionName: ${instance.sessionName}`,
-      )
+      if (instance.connectionType === 'meta_official') {
+        this.sendSuccess(res, {
+          qrCode: null,
+          sessionName: instance.sessionName,
+          status: instance.status,
+        })
+        return
+      }
+
+      console.log('API getQrCode - Instance ID: ' + id + ', SessionName: ' + instance.sessionName)
 
       const qrCode = WhatsAppMultiManager.getQrCode(instance.sessionName)
 
-      console.log(
-        `📱 API getQrCode - QR Code encontrado: ${qrCode ? 'SIM' : 'NAO'}`,
-      )
+      console.log('API getQrCode - QR Code encontrado: ' + (qrCode ? 'SIM' : 'NAO'))
 
       this.sendSuccess(res, {
         qrCode,

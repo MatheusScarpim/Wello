@@ -25,7 +25,8 @@ import {
   Star,
   Edit2,
   X,
-  MessageSquare
+  MessageSquare,
+  Save
 } from 'lucide-vue-next'
 
 const toast = useToast()
@@ -38,6 +39,7 @@ const connectingIds = ref<Set<string>>(new Set())
 const disconnectingIds = ref<Set<string>>(new Set())
 const updatingBotIds = ref<Set<string>>(new Set())
 const updatingDepartmentInstances = ref<Set<string>>(new Set())
+const savingMetaConfigIds = ref<Set<string>>(new Set())
 const departments = ref<Department[]>([])
 
 // Modal states
@@ -58,6 +60,15 @@ const isSavingMessages = ref(false)
 // Form state
 const newInstanceForm = ref<WhatsAppInstancePayload>({
   name: '',
+  connectionType: 'wppconnect',
+  metaConfig: {
+    enabled: false,
+    accessToken: '',
+    phoneNumberId: '',
+    instagramAccountId: '',
+    apiVersion: 'v17.0',
+    baseUrl: 'https://graph.facebook.com',
+  },
   isDefault: false,
   autoConnect: true,
   departmentIds: [],
@@ -157,6 +168,29 @@ async function createInstance() {
     return
   }
 
+  if (newInstanceForm.value.connectionType === 'meta_official') {
+    const accessToken = newInstanceForm.value.metaConfig?.accessToken?.trim()
+    const phoneNumberId = newInstanceForm.value.metaConfig?.phoneNumberId?.trim()
+    const instagramAccountId =
+      newInstanceForm.value.metaConfig?.instagramAccountId?.trim()
+    if (!accessToken || (!phoneNumberId && !instagramAccountId)) {
+      toast.error(
+        'Para Meta oficial, preencha Access Token e Phone Number ID ou Instagram Account ID',
+      )
+      return
+    }
+    newInstanceForm.value.metaConfig = {
+      enabled: true,
+      accessToken,
+      phoneNumberId,
+      instagramAccountId,
+      apiVersion: newInstanceForm.value.metaConfig?.apiVersion || 'v17.0',
+      baseUrl:
+        newInstanceForm.value.metaConfig?.baseUrl ||
+        'https://graph.facebook.com',
+    }
+  }
+
   isCreating.value = true
   try {
     const response = await whatsappInstancesApi.create(newInstanceForm.value)
@@ -166,6 +200,15 @@ async function createInstance() {
       showCreateModal.value = false
       newInstanceForm.value = {
         name: '',
+        connectionType: 'wppconnect',
+        metaConfig: {
+          enabled: false,
+          accessToken: '',
+          phoneNumberId: '',
+          instagramAccountId: '',
+          apiVersion: 'v17.0',
+          baseUrl: 'https://graph.facebook.com',
+        },
         isDefault: false,
         autoConnect: true,
         departmentIds: [],
@@ -174,7 +217,9 @@ async function createInstance() {
 
       // Auto connect the new instance
       const instance = response.data as WhatsAppInstance
-      await connectInstance(instance.id)
+      if (instance.connectionType !== 'meta_official') {
+        await connectInstance(instance.id)
+      }
     }
   } catch (err: any) {
     toast.error(err.message || 'Erro ao criar instancia')
@@ -184,6 +229,23 @@ async function createInstance() {
 }
 
 async function connectInstance(id: string) {
+  const targetInstance = instances.value.find(i => i.id === id)
+  if (targetInstance?.connectionType === 'meta_official') {
+    const configured =
+      !!targetInstance.metaConfig?.enabled &&
+      !!targetInstance.metaConfig?.accessToken &&
+      !!(
+        targetInstance.metaConfig?.phoneNumberId ||
+        targetInstance.metaConfig?.instagramAccountId
+      )
+    if (!configured) {
+      toast.error(
+        'Configure Access Token e Phone Number ID ou Instagram Account ID para conectar Meta',
+      )
+      return
+    }
+  }
+
   connectingIds.value.add(id)
   try {
     await whatsappInstancesApi.connect(id)
@@ -328,6 +390,10 @@ async function saveAutomaticMessages() {
 }
 
 async function openQrModal(instance: WhatsAppInstance) {
+  if (instance.connectionType === 'meta_official') {
+    toast.info('Instância Meta oficial não usa QR Code')
+    return
+  }
   selectedInstance.value = instance
   currentQrCode.value = instance.qrCode
   showQrModal.value = true
@@ -426,6 +492,70 @@ function getStatusText(status: string) {
   }
 }
 
+function getConnectionTypeLabel(connectionType?: string) {
+  return connectionType === 'meta_official'
+    ? 'Meta Oficial (Cloud API)'
+    : 'WhatsApp Web (QR Code)'
+}
+
+function ensureMetaConfig(instance: WhatsAppInstance) {
+  if (!instance.metaConfig) {
+    instance.metaConfig = {
+      enabled: true,
+      accessToken: '',
+      phoneNumberId: '',
+      instagramAccountId: '',
+      apiVersion: 'v17.0',
+      baseUrl: 'https://graph.facebook.com',
+    }
+    return
+  }
+
+  instance.metaConfig.enabled = instance.metaConfig.enabled ?? true
+  instance.metaConfig.apiVersion = instance.metaConfig.apiVersion || 'v17.0'
+  instance.metaConfig.baseUrl =
+    instance.metaConfig.baseUrl || 'https://graph.facebook.com'
+}
+
+async function saveInstanceMetaConfig(instance: WhatsAppInstance) {
+  if (savingMetaConfigIds.value.has(instance.id)) return
+  ensureMetaConfig(instance)
+
+  const hasRequired =
+    !!instance.metaConfig?.accessToken?.trim() &&
+    !!(
+      instance.metaConfig?.phoneNumberId?.trim() ||
+      instance.metaConfig?.instagramAccountId?.trim()
+    )
+  if (!hasRequired) {
+    toast.error(
+      'Preencha Access Token e Phone Number ID ou Instagram Account ID da Meta',
+    )
+    return
+  }
+
+  savingMetaConfigIds.value.add(instance.id)
+  try {
+    await whatsappInstancesApi.update(instance.id, {
+      connectionType: 'meta_official',
+      metaConfig: {
+        enabled: true,
+        accessToken: instance.metaConfig?.accessToken?.trim(),
+        phoneNumberId: instance.metaConfig?.phoneNumberId?.trim(),
+        instagramAccountId: instance.metaConfig?.instagramAccountId?.trim(),
+        apiVersion: instance.metaConfig?.apiVersion || 'v17.0',
+        baseUrl: instance.metaConfig?.baseUrl || 'https://graph.facebook.com',
+      },
+    })
+    await fetchInstances()
+    toast.success('Configuração Meta salva')
+  } catch (err: any) {
+    toast.error(err.message || 'Erro ao salvar configuração Meta')
+  } finally {
+    savingMetaConfigIds.value.delete(instance.id)
+  }
+}
+
 onMounted(async () => {
   await fetchInstances()
   await fetchBots()
@@ -447,8 +577,8 @@ onUnmounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Instancias WhatsApp</h1>
-        <p class="text-gray-500 mt-1">Gerencie multiplos numeros de WhatsApp</p>
+        <h1 class="text-2xl font-bold text-gray-900">Instancias</h1>
+        <p class="text-gray-500 mt-1">Gerencie suas instancias de canais</p>
       </div>
       <button @click="showCreateModal = true" class="btn-primary">
         <Plus class="w-4 h-4" />
@@ -516,7 +646,7 @@ onUnmounted(() => {
         <Smartphone class="w-10 h-10 text-gray-400" />
       </div>
       <h3 class="mt-4 text-lg font-medium text-gray-900">Nenhuma instancia</h3>
-      <p class="mt-2 text-gray-500">Crie sua primeira instancia para comecar a usar o WhatsApp</p>
+      <p class="mt-2 text-gray-500">Crie sua primeira instancia para comecar</p>
       <button @click="showCreateModal = true" class="btn-primary mt-4">
         <Plus class="w-4 h-4" />
         Criar Instancia
@@ -565,6 +695,9 @@ onUnmounted(() => {
                 </div>
                 <p class="text-sm text-gray-500">
                   {{ instance.phoneNumber || instance.sessionName }}
+                </p>
+                <p class="text-xs text-gray-400 mt-1">
+                  {{ getConnectionTypeLabel(instance.connectionType) }}
                 </p>
               </div>
             </div>
@@ -702,11 +835,67 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <div
+            v-if="instance.connectionType === 'meta_official'"
+            class="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium text-blue-900">Configuração Meta Oficial</span>
+              <button
+                @click="saveInstanceMetaConfig(instance)"
+                :disabled="savingMetaConfigIds.has(instance.id)"
+                class="btn-sm btn-primary"
+              >
+                <Loader2 v-if="savingMetaConfigIds.has(instance.id)" class="w-4 h-4 animate-spin" />
+                <Save v-else class="w-4 h-4" />
+                Salvar
+              </button>
+            </div>
+
+            <div class="space-y-2">
+              <input
+                :value="instance.metaConfig?.accessToken || ''"
+                @input="ensureMetaConfig(instance); instance.metaConfig!.accessToken = ($event.target as HTMLInputElement).value"
+                type="text"
+                class="input w-full text-sm"
+                placeholder="Meta Access Token"
+              />
+              <input
+                :value="instance.metaConfig?.phoneNumberId || ''"
+                @input="ensureMetaConfig(instance); instance.metaConfig!.phoneNumberId = ($event.target as HTMLInputElement).value"
+                type="text"
+                class="input w-full text-sm"
+                placeholder="Meta Phone Number ID"
+              />
+              <input
+                :value="instance.metaConfig?.instagramAccountId || ''"
+                @input="ensureMetaConfig(instance); instance.metaConfig!.instagramAccountId = ($event.target as HTMLInputElement).value"
+                type="text"
+                class="input w-full text-sm"
+                placeholder="Instagram Account ID"
+              />
+              <input
+                :value="instance.metaConfig?.apiVersion || 'v17.0'"
+                @input="ensureMetaConfig(instance); instance.metaConfig!.apiVersion = ($event.target as HTMLInputElement).value"
+                type="text"
+                class="input w-full text-sm"
+                placeholder="API Version (ex: v17.0)"
+              />
+              <input
+                :value="instance.metaConfig?.baseUrl || 'https://graph.facebook.com'"
+                @input="ensureMetaConfig(instance); instance.metaConfig!.baseUrl = ($event.target as HTMLInputElement).value"
+                type="text"
+                class="input w-full text-sm"
+                placeholder="Base URL"
+              />
+            </div>
+          </div>
+
           <!-- Actions -->
           <div class="mt-4 flex flex-wrap gap-2">
             <!-- Connect / Show QR -->
             <button
-              v-if="!instance.connected"
+              v-if="instance.connectionType !== 'meta_official' && !instance.connected"
               @click="instance.qrCode ? openQrModal(instance) : connectInstance(instance.id)"
               :disabled="connectingIds.has(instance.id)"
               class="btn-sm btn-primary"
@@ -719,7 +908,7 @@ onUnmounted(() => {
 
             <!-- Disconnect -->
             <button
-              v-if="instance.connected"
+              v-if="instance.connectionType !== 'meta_official' && instance.connected"
               @click="disconnectInstance(instance.id)"
               :disabled="disconnectingIds.has(instance.id)"
               class="btn-sm btn-outline text-red-600 border-red-300 hover:bg-red-50"
@@ -806,6 +995,55 @@ onUnmounted(() => {
               />
             </div>
 
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de Conexao
+              </label>
+              <select v-model="newInstanceForm.connectionType" class="select w-full">
+                <option value="wppconnect">WhatsApp Web (QR Code)</option>
+                <option value="meta_official">Meta Oficial (Cloud API)</option>
+              </select>
+            </div>
+
+            <div
+              v-if="newInstanceForm.connectionType === 'meta_official'"
+              class="space-y-2 p-3 bg-blue-50 border border-blue-100 rounded-lg"
+            >
+              <p class="text-xs text-blue-800">
+                Configure as credenciais da API oficial da Meta para esta instância.
+              </p>
+              <input
+                v-model="newInstanceForm.metaConfig!.accessToken"
+                type="text"
+                class="input w-full"
+                placeholder="Meta Access Token"
+              />
+              <input
+                v-model="newInstanceForm.metaConfig!.phoneNumberId"
+                type="text"
+                class="input w-full"
+                placeholder="Meta Phone Number ID"
+              />
+              <input
+                v-model="newInstanceForm.metaConfig!.instagramAccountId"
+                type="text"
+                class="input w-full"
+                placeholder="Instagram Account ID"
+              />
+              <input
+                v-model="newInstanceForm.metaConfig!.apiVersion"
+                type="text"
+                class="input w-full"
+                placeholder="API Version (v17.0)"
+              />
+              <input
+                v-model="newInstanceForm.metaConfig!.baseUrl"
+                type="text"
+                class="input w-full"
+                placeholder="Base URL"
+              />
+            </div>
+
             <div class="flex items-center gap-2">
               <input
                 v-model="newInstanceForm.isDefault"
@@ -818,7 +1056,10 @@ onUnmounted(() => {
               </label>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div
+              v-if="newInstanceForm.connectionType !== 'meta_official'"
+              class="flex items-center gap-2"
+            >
               <input
                 v-model="newInstanceForm.autoConnect"
                 type="checkbox"
@@ -1080,3 +1321,4 @@ onUnmounted(() => {
   @apply px-3 py-1.5 text-sm rounded-lg font-medium inline-flex items-center gap-1.5 transition-colors;
 }
 </style>
+

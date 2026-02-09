@@ -17,7 +17,6 @@ import {
   Bot,
   MoreVertical,
   Archive,
-  UserPlus,
   RefreshCw,
   List,
   LayoutGrid,
@@ -29,14 +28,13 @@ import {
   X,
   Sparkles,
   Loader2,
-  Pencil,
   Check,
   Reply,
   Tag,
-  Plus,
   ArrowRightLeft,
   Sticker,
-  Pause
+  Pause,
+  Wand2
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import AuraResponseCard from '@/components/aura/AuraResponseCard.vue'
@@ -75,6 +73,7 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const previewMedia = ref<{ url: string; type: 'image' | 'video' } | null>(null)
 const swipeState = ref({
   messageId: null as string | null,
+  direction: null as Message['direction'] | null,
   startX: 0,
   offset: 0
 })
@@ -105,6 +104,8 @@ const isSavingName = ref(false)
 
 // Improve message
 const isImprovingMessage = ref(false)
+const improvedMessage = ref('')
+const showImprovePanel = ref(false)
 
 // Reply (responder mensagem)
 const replyingTo = ref<Message | null>(null)
@@ -274,16 +275,33 @@ async function improveMessage() {
   if (!messageText.value.trim() || !conversation.value) return
 
   isImprovingMessage.value = true
+  showImprovePanel.value = true
+  improvedMessage.value = ''
+
   try {
     const response = await iaApi.improveMessage(conversationId.value, messageText.value)
     if (response.data?.improved) {
-      messageText.value = response.data.improved
+      improvedMessage.value = response.data.improved
     }
   } catch {
     toast.error('Erro ao melhorar mensagem')
+    showImprovePanel.value = false
   } finally {
     isImprovingMessage.value = false
   }
+}
+
+function useImprovedMessage() {
+  if (improvedMessage.value) {
+    messageText.value = improvedMessage.value
+    showImprovePanel.value = false
+    improvedMessage.value = ''
+  }
+}
+
+function closeImprovePanel() {
+  showImprovePanel.value = false
+  improvedMessage.value = ''
 }
 
 // Reply functions
@@ -303,29 +321,35 @@ function getQuotedMessage(message: Message): Message | null {
 function resetSwipeState() {
   swipeState.value = {
     messageId: null,
+    direction: null,
     startX: 0,
     offset: 0
   }
 }
 
 function handleMessageTouchStart(message: Message, event: TouchEvent) {
-  if (message.direction !== 'incoming' || !message._id) return
+  if (!message._id) return
 
   const touch = event.touches[0]
   swipeState.value = {
     messageId: message._id,
+    direction: message.direction,
     startX: touch.clientX,
     offset: 0
   }
 }
 
 function handleMessageTouchMove(event: TouchEvent) {
-  if (!swipeState.value.messageId) return
+  if (!swipeState.value.messageId || !swipeState.value.direction) return
 
   const touch = event.touches[0]
   const delta = touch.clientX - swipeState.value.startX
+  const effectiveDelta =
+    swipeState.value.direction === 'incoming' ? delta : -delta
 
-  swipeState.value.offset = delta > 0 ? Math.min(delta, MAX_SWIPE_OFFSET) : 0
+  swipeState.value.offset = effectiveDelta > 0
+    ? Math.min(effectiveDelta, MAX_SWIPE_OFFSET)
+    : 0
 }
 
 function handleMessageTouchEnd(message: Message) {
@@ -342,11 +366,15 @@ function handleMessageTouchEnd(message: Message) {
 }
 
 function getMessageSwipeStyle(message: Message) {
-  if (message.direction !== 'incoming') return
   if (swipeState.value.messageId !== message._id) return
 
+  const translateX =
+    message.direction === 'incoming'
+      ? swipeState.value.offset
+      : -swipeState.value.offset
+
   return {
-    transform: `translateX(${swipeState.value.offset}px)`
+    transform: `translateX(${translateX}px)`
   }
 }
 
@@ -1115,8 +1143,8 @@ onUnmounted(() => {
         <button
           @click="requestAiSuggestion"
           :disabled="isRequestingSuggestion"
-          class="ai-btn flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-r from-violet-500 to-purple-600 text-white transition-all active:scale-95 disabled:opacity-70"
-          title="Pedir sugestão da IA"
+          class="ai-btn flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-primary-500 text-white transition-all active:scale-95 disabled:opacity-70"
+          title="Sugestão IA"
         >
           <Loader2 v-if="isRequestingSuggestion" class="w-4 h-4 animate-spin" />
           <Sparkles v-else class="w-4 h-4" />
@@ -1396,61 +1424,92 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- AI Suggestion Panel -->
+      <!-- AI Suggestion Panel (minimalista) -->
       <div
         v-if="showSuggestionPanel"
-        class="ai-suggestion-panel border-t border-purple-200/50"
+        class="ai-panel border-t border-primary-500/20"
       >
-        <!-- Header compacto -->
-        <div class="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-violet-500 to-purple-600">
-          <div class="flex items-center gap-2">
-            <div class="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
-              <Sparkles class="w-3.5 h-3.5 text-white" :class="{ 'animate-pulse': isRequestingSuggestion }" />
-            </div>
-            <span class="text-sm font-medium text-white">Sugestão IA</span>
-            <span v-if="isRequestingSuggestion" class="text-xs text-white/70 animate-pulse">pensando...</span>
+        <!-- Loading -->
+        <div v-if="isRequestingSuggestion" class="flex items-center gap-3 px-3 py-3 bg-primary-50/50">
+          <Loader2 class="w-4 h-4 text-primary-500 animate-spin flex-shrink-0" />
+          <div class="flex-1 space-y-1.5">
+            <div class="h-2 bg-primary-100 rounded-full w-3/4 animate-pulse"></div>
+            <div class="h-2 bg-primary-50 rounded-full w-1/2 animate-pulse" style="animation-delay: 150ms"></div>
           </div>
-          <button
-            @click="closeSuggestionPanel"
-            class="p-1.5 hover:bg-white/20 rounded-lg text-white/70 hover:text-white transition-colors"
-          >
-            <X class="w-4 h-4" />
+          <button @click="closeSuggestionPanel" class="p-1 text-gray-400 hover:text-gray-600">
+            <X class="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <!-- Conteudo -->
-        <div class="p-3 bg-gradient-to-b from-purple-50 to-white">
-          <!-- Loading state -->
-          <div v-if="isRequestingSuggestion" class="py-4">
-            <div class="flex items-center justify-center gap-2 mb-3">
-              <div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-              <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-              <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
-            </div>
-            <p class="text-xs text-center text-purple-600/70">Analisando conversa...</p>
+        <!-- Suggestion Result -->
+        <div v-else-if="aiSuggestion" class="px-3 py-2.5 bg-primary-50/30">
+          <div class="flex items-start gap-2 mb-2">
+            <Sparkles class="w-3.5 h-3.5 text-primary-500 mt-0.5 flex-shrink-0" />
+            <p class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed break-words flex-1">{{ aiSuggestion }}</p>
+            <button @click="closeSuggestionPanel" class="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0">
+              <X class="w-3.5 h-3.5" />
+            </button>
           </div>
+          <div class="flex gap-1.5 ml-5.5">
+            <button
+              @click="useSuggestion"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs font-medium hover:bg-primary-700 active:scale-[0.97] transition-all"
+            >
+              <CheckCircle2 class="w-3 h-3" />
+              Usar
+            </button>
+            <button
+              @click="requestAiSuggestion"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary-500/30 text-primary-600 text-xs font-medium hover:bg-primary-50 active:scale-[0.97] transition-all"
+            >
+              <RefreshCw class="w-3 h-3" />
+              Regenerar
+            </button>
+          </div>
+        </div>
+      </div>
 
-          <!-- Suggestion content -->
-          <div v-else-if="aiSuggestion">
-            <div class="bg-white rounded-xl p-3 shadow-sm border border-purple-100 mb-3 overflow-hidden">
-              <p class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed break-words">{{ aiSuggestion }}</p>
-            </div>
-            <div class="flex gap-2">
-              <button
-                @click="useSuggestion"
-                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-medium shadow-sm hover:shadow-md active:scale-[0.98] transition-all"
-              >
-                <CheckCircle2 class="w-4 h-4" />
-                <span>Usar</span>
-              </button>
-              <button
-                @click="requestAiSuggestion"
-                class="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl border border-purple-200 text-purple-600 text-sm font-medium hover:bg-purple-50 active:scale-[0.98] transition-all"
-                title="Gerar nova sugestao"
-              >
-                <RefreshCw class="w-4 h-4" />
-              </button>
-            </div>
+      <!-- Improve Message Panel (minimalista) -->
+      <div
+        v-if="showImprovePanel"
+        class="ai-panel border-t border-primary-500/20"
+      >
+        <!-- Loading -->
+        <div v-if="isImprovingMessage" class="flex items-center gap-3 px-3 py-3 bg-primary-50/50">
+          <Loader2 class="w-4 h-4 text-primary-500 animate-spin flex-shrink-0" />
+          <div class="flex-1 space-y-1.5">
+            <div class="h-2 bg-primary-100 rounded-full w-3/4 animate-pulse"></div>
+            <div class="h-2 bg-primary-50 rounded-full w-1/2 animate-pulse" style="animation-delay: 150ms"></div>
+          </div>
+          <button @click="closeImprovePanel" class="p-1 text-gray-400 hover:text-gray-600">
+            <X class="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <!-- Improved Result -->
+        <div v-else-if="improvedMessage" class="px-3 py-2.5 bg-primary-50/30">
+          <div class="flex items-start gap-2 mb-2">
+            <Wand2 class="w-3.5 h-3.5 text-primary-500 mt-0.5 flex-shrink-0" />
+            <p class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed break-words flex-1">{{ improvedMessage }}</p>
+            <button @click="closeImprovePanel" class="p-1 text-gray-400 hover:text-gray-600 flex-shrink-0">
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div class="flex gap-1.5 ml-5.5">
+            <button
+              @click="useImprovedMessage"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs font-medium hover:bg-primary-700 active:scale-[0.97] transition-all"
+            >
+              <CheckCircle2 class="w-3 h-3" />
+              Usar
+            </button>
+            <button
+              @click="closeImprovePanel"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 active:scale-[0.97] transition-all"
+            >
+              <X class="w-3 h-3" />
+              Descartar
+            </button>
           </div>
         </div>
       </div>
@@ -1644,16 +1703,16 @@ onUnmounted(() => {
               class="input w-full py-3 text-base sm:text-sm pr-12 rounded-xl"
               :disabled="isSending || isImprovingMessage"
             />
-            <!-- Improve message button -->
+            <!-- Melhorar mensagem -->
             <button
               v-if="messageText.trim().length > 0"
               @click="improveMessage"
               :disabled="isImprovingMessage || isSending"
-              class="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-purple-500 hover:bg-purple-50 active:bg-purple-100 disabled:opacity-50 transition-all"
-              title="Melhorar mensagem com IA"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-primary-500 hover:bg-primary-50 active:bg-primary-100 disabled:opacity-50 transition-all"
+              title="Melhorar resposta com IA"
             >
               <Loader2 v-if="isImprovingMessage" class="w-4 h-4 animate-spin" />
-              <Sparkles v-else class="w-4 h-4" />
+              <Wand2 v-else class="w-4 h-4" />
             </button>
           </div>
           <button
@@ -1944,48 +2003,14 @@ onUnmounted(() => {
   }
 }
 
-/* AI Suggestion Panel Animation */
-.ai-suggestion-panel {
-  animation: slideUp 0.25s ease-out;
-  width: 100%;
-  max-width: 100%;
-  overflow: hidden;
+/* AI Panel - Minimalista */
+.ai-panel {
+  animation: slideUp 0.2s ease-out;
   flex-shrink: 0;
 }
 
-.ai-suggestion-panel p {
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Bounce animation for loading dots */
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
-.animate-bounce {
-  animation: bounce 0.5s infinite;
-}
-
-/* AI Button glow effect */
 .ai-btn {
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.3);
 }
 
 /* Input focus state */

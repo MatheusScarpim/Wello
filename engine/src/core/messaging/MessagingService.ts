@@ -1,6 +1,9 @@
 import axios from 'axios'
 
+import whatsappInstanceRepository from '@/api/repositories/WhatsAppInstanceRepository'
+
 import { prepareLocalMediaPayload } from '../helpers/WhatsAppMediaHelper'
+import InstagramManager from '../providers/InstagramManager'
 import MetaManager from '../providers/MetaManager'
 import WhatsAppManager from '../whatsapp/WhatsAppManager'
 import WhatsAppMultiManager from '../whatsapp/WhatsAppMultiManager'
@@ -10,7 +13,7 @@ import WhatsAppMultiManager from '../whatsapp/WhatsAppMultiManager'
  */
 export interface SendMessageParams {
   to: string
-  provider: 'whatsapp' | 'meta_whatsapp' | 'telegram' // Provider determina qual serviço usar
+  provider: 'whatsapp' | 'meta_whatsapp' | 'meta' | 'instagram' | 'telegram' // Provider determina qual serviço usar
   message?: string
   type?:
     | 'text'
@@ -67,6 +70,11 @@ export interface SendMessageParams {
   metaPhoneNumberId?: string
   metaApiVersion?: string
   metaBaseUrl?: string
+  // Credenciais Instagram Direct (quando vier via request)
+  instagramAccessToken?: string
+  instagramAccountId?: string
+  instagramApiVersion?: string
+  instagramBaseUrl?: string
   // Instância específica do WhatsApp (multi-instance)
   sessionName?: string
 }
@@ -105,15 +113,35 @@ export class MessagingService {
   public async sendMessage(
     params: SendMessageParams,
   ): Promise<SendMessageResult> {
-    const { provider, type = 'text' } = params
+    const normalizedProvider =
+      params.provider === 'meta' ? 'meta_whatsapp' : params.provider
 
     try {
-      switch (provider) {
+      if (normalizedProvider === 'whatsapp' && params.sessionName) {
+        const instance = await whatsappInstanceRepository.findBySessionName(
+          params.sessionName,
+        )
+        const shouldRouteToMeta =
+          instance?.connectionType === 'meta_official' &&
+          !!instance.metaConfig?.enabled
+
+        if (shouldRouteToMeta) {
+          return await this.sendViaMeta({
+            ...params,
+            provider: 'meta_whatsapp',
+          })
+        }
+      }
+
+      switch (normalizedProvider) {
         case 'whatsapp':
           return await this.sendViaWppConnect(params)
 
         case 'meta_whatsapp':
           return await this.sendViaMeta(params)
+
+        case 'instagram':
+          return await this.sendViaInstagram(params)
 
         case 'telegram':
           return await this.sendViaTelegram(params)
@@ -121,16 +149,16 @@ export class MessagingService {
         default:
           return {
             success: false,
-            error: `Provider ${provider} não suportado`,
-            provider,
+            error: `Provider ${normalizedProvider} não suportado`,
+            provider: normalizedProvider,
           }
       }
     } catch (error: any) {
-      console.error(`❌ Erro ao enviar mensagem via ${provider}:`, error)
+      console.error(`❌ Erro ao enviar mensagem via ${normalizedProvider}:`, error)
       return {
         success: false,
         error: error.message || 'Erro desconhecido',
-        provider,
+        provider: normalizedProvider,
       }
     }
   }
@@ -717,16 +745,52 @@ export class MessagingService {
       metaPhoneNumberId,
       metaApiVersion,
       metaBaseUrl,
+      sessionName,
     } = params
 
     // Monta configuração customizada se credenciais foram fornecidas
+    let instanceMetaConfig:
+      | {
+          accessToken?: string
+          phoneNumberId?: string
+          apiVersion?: string
+          baseUrl?: string
+        }
+      | undefined
+
+    if (sessionName) {
+      const instance = await whatsappInstanceRepository.findBySessionName(
+        sessionName,
+      )
+      if (
+        instance?.connectionType === 'meta_official' &&
+        instance.metaConfig?.enabled
+      ) {
+        instanceMetaConfig = {
+          accessToken: instance.metaConfig.accessToken,
+          phoneNumberId: instance.metaConfig.phoneNumberId,
+          apiVersion: instance.metaConfig.apiVersion,
+          baseUrl: instance.metaConfig.baseUrl,
+        }
+      }
+    }
+
     const customConfig =
-      metaAccessToken || metaPhoneNumberId
+      metaAccessToken ||
+      metaPhoneNumberId ||
+      instanceMetaConfig?.accessToken ||
+      instanceMetaConfig?.phoneNumberId
         ? {
-            accessToken: metaAccessToken,
-            phoneNumberId: metaPhoneNumberId,
-            apiVersion: metaApiVersion,
-            baseUrl: metaBaseUrl,
+            accessToken: metaAccessToken || instanceMetaConfig?.accessToken,
+            phoneNumberId: metaPhoneNumberId || instanceMetaConfig?.phoneNumberId,
+            apiVersion:
+              metaApiVersion ||
+              instanceMetaConfig?.apiVersion ||
+              process.env.META_API_VERSION,
+            baseUrl:
+              metaBaseUrl ||
+              instanceMetaConfig?.baseUrl ||
+              process.env.URL_META,
           }
         : undefined
 
@@ -820,7 +884,10 @@ export class MessagingService {
             throw new Error('URL ou base64 da mídia é obrigatório')
           }
 
-          const mediaContent = mediaUrl || mediaBase64!
+          const mediaContent = await this.prepareMediaPayload(
+            mediaUrl,
+            mediaBase64,
+          )
 
           result = await MetaManager.sendMedia(
             to,
@@ -849,6 +916,129 @@ export class MessagingService {
   }
 
   /**
+   * Envia via Instagram Direct (Meta)
+   */
+  private async sendViaInstagram(
+    params: SendMessageParams,
+  ): Promise<SendMessageResult> {
+    const {
+      to,
+      message,
+      type = 'text',
+      mediaUrl,
+      mediaBase64,
+      instagramAccessToken,
+      instagramAccountId,
+      instagramApiVersion,
+      instagramBaseUrl,
+      sessionName,
+    } = params
+
+    let instanceInstagramConfig:
+      | {
+          accessToken?: string
+          instagramAccountId?: string
+          apiVersion?: string
+          baseUrl?: string
+        }
+      | undefined
+
+    if (sessionName) {
+      const instance = await whatsappInstanceRepository.findBySessionName(
+        sessionName,
+      )
+      if (
+        instance?.connectionType === 'meta_official' &&
+        instance.metaConfig?.enabled
+      ) {
+        instanceInstagramConfig = {
+          accessToken: instance.metaConfig.accessToken,
+          instagramAccountId: instance.metaConfig.instagramAccountId,
+          apiVersion: instance.metaConfig.apiVersion,
+          baseUrl: instance.metaConfig.baseUrl,
+        }
+      }
+    }
+
+    const customConfig =
+      instagramAccessToken ||
+      instagramAccountId ||
+      instanceInstagramConfig?.accessToken ||
+      instanceInstagramConfig?.instagramAccountId
+        ? {
+            accessToken:
+              instagramAccessToken || instanceInstagramConfig?.accessToken,
+            instagramAccountId:
+              instagramAccountId ||
+              instanceInstagramConfig?.instagramAccountId,
+            apiVersion:
+              instagramApiVersion ||
+              instanceInstagramConfig?.apiVersion ||
+              process.env.INSTAGRAM_API_VERSION,
+            baseUrl:
+              instagramBaseUrl ||
+              instanceInstagramConfig?.baseUrl ||
+              process.env.INSTAGRAM_BASE_URL,
+          }
+        : undefined
+
+    if (!customConfig && !InstagramManager.getIsEnabled()) {
+      return {
+        success: false,
+        error:
+          'Instagram Direct nao esta configurado. Forneca instagramAccessToken e instagramAccountId.',
+        provider: 'instagram',
+      }
+    }
+
+    try {
+      let result: { idMessage: string }
+
+      switch (type) {
+        case 'text':
+          if (!message) {
+            throw new Error('Mensagem de texto e obrigatoria')
+          }
+          result = await InstagramManager.sendText(to, message, customConfig)
+          break
+
+        case 'image':
+        case 'video':
+          if (!mediaUrl && !mediaBase64) {
+            throw new Error('URL da midia e obrigatoria para Instagram Direct')
+          }
+          if (mediaBase64) {
+            throw new Error(
+              'Instagram Direct nao suporta envio por base64 neste endpoint; use mediaUrl publico',
+            )
+          }
+          result = await InstagramManager.sendMedia(
+            to,
+            type,
+            mediaUrl!,
+            customConfig,
+          )
+          break
+
+        default:
+          if (!message) {
+            throw new Error(`Tipo ${type} nao suportado para Instagram Direct`)
+          }
+          result = await InstagramManager.sendText(to, message, customConfig)
+          break
+      }
+
+      return {
+        success: true,
+        messageId: result.idMessage,
+        provider: 'instagram',
+      }
+    } catch (error: any) {
+      throw new Error(`Erro Instagram API: ${error.message}`)
+    }
+  }
+
+  /**
    * Envia via Telegram (placeholder)
    */
   private async sendViaTelegram(
@@ -867,7 +1057,7 @@ export class MessagingService {
    */
   public detectProvider(
     identifier: string,
-  ): 'whatsapp' | 'meta_whatsapp' | 'telegram' {
+  ): 'whatsapp' | 'meta_whatsapp' | 'instagram' | 'telegram' {
     // Se começa com número de telefone, é WhatsApp
     if (/^55\d{10,11}$/.test(identifier)) {
       // Por padrão, usa WPPConnect
@@ -878,6 +1068,10 @@ export class MessagingService {
     // Se for ID de chat do Telegram
     if (/^-?\d+$/.test(identifier)) {
       return 'telegram'
+    }
+
+    if (identifier.startsWith('ig:')) {
+      return 'instagram'
     }
 
     // Padrão

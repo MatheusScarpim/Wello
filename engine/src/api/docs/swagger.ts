@@ -43,6 +43,7 @@ const swaggerDocument = {
     },
     { name: 'WhatsApp', description: 'Controle de conexao com o WhatsApp' },
     { name: 'Meta', description: 'Webhook e envio via Meta WhatsApp Business' },
+    { name: 'Instagram', description: 'Webhook e envio via Instagram Direct' },
     { name: 'Webhooks', description: 'Cadastro e teste de webhooks' },
     {
       name: 'Storage',
@@ -135,7 +136,7 @@ const swaggerDocument = {
           message: { type: 'string', example: 'Ola!' },
           provider: {
             type: 'string',
-            enum: ['whatsapp', 'meta_whatsapp', 'telegram'],
+            enum: ['whatsapp', 'meta_whatsapp', 'instagram', 'telegram'],
             default: 'whatsapp',
           },
           type: {

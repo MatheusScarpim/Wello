@@ -11,6 +11,7 @@ import expenseRoutes from './expense.routes'
 import finalizationRoutes from './finalization.routes'
 import finalizationMetricsRoutes from './finalization-metrics.routes'
 import iaRoutes from './ia.routes'
+import instagramRoutes from './instagram.routes'
 import messageRoutes from './message.routes'
 import messageMetricsRoutes from './message-metrics.routes'
 import metaRoutes from './meta.routes'
@@ -36,6 +37,7 @@ export function setupRoutes(): Array<{ path: string; router: Router }> {
     { path: '/api/whatsapp', router: whatsappRoutes },
     { path: '/api/whatsapp/instances', router: whatsappInstanceRoutes },
     { path: '/api/meta', router: metaRoutes },
+    { path: '/api/instagram', router: instagramRoutes },
     { path: '/api/webhooks', router: webhookRoutes },
     { path: '/api/storage', router: storageRoutes },
     { path: '/api/expenses', router: expenseRoutes },

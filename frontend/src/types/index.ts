@@ -709,11 +709,22 @@ export interface DashboardMetrics {
 // ============================================
 
 export type WhatsAppInstanceStatus = 'disconnected' | 'connecting' | 'qrcode' | 'connected' | 'error'
+export type WhatsAppConnectionType = 'wppconnect' | 'meta_official'
+
+export interface MetaInstanceConfig {
+  enabled: boolean
+  accessToken?: string
+  phoneNumberId?: string
+  instagramAccountId?: string
+  apiVersion?: string
+  baseUrl?: string
+}
 
 export interface WhatsAppInstance {
   id: string
   name: string
   sessionName: string
+  connectionType?: WhatsAppConnectionType
   status: WhatsAppInstanceStatus
   connected: boolean
   authenticated: boolean
@@ -721,14 +732,18 @@ export interface WhatsAppInstance {
   phoneNumber?: string
   profileName?: string
   isDefault: boolean
+  departmentIds?: string[]
   botEnabled?: boolean
   botId?: string | null
   automaticMessages?: AutomaticMessages
   fairDistributionEnabled?: boolean
+  metaConfig?: MetaInstanceConfig
 }
 
 export interface WhatsAppInstancePayload {
   name: string
+  connectionType?: WhatsAppConnectionType
+  metaConfig?: MetaInstanceConfig
   isDefault?: boolean
   autoConnect?: boolean
   webhookUrl?: string

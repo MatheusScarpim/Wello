@@ -154,7 +154,7 @@ const router = createRouter({
           path: 'whatsapp',
           name: 'whatsapp',
           component: () => import('@/views/WhatsAppView.vue'),
-          meta: { title: 'Conexão WhatsApp', roles: ['admin', 'supervisor'] }
+          meta: { title: 'Instancias', roles: ['admin', 'supervisor'] }
         }
       ]
     }
@@ -183,4 +183,5 @@ router.beforeEach((to, _from, next) => {
 })
 
 export default router
+
 

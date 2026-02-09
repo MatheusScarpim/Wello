@@ -11,7 +11,9 @@ import {
   Clock,
   MessageSquare,
   Star,
-  Search
+  Search,
+  Filter,
+  X
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -61,6 +63,20 @@ const filteredOperators = computed(() => {
     return matchesSearch && matchesStatus && matchesDepartment
   })
 })
+
+const activeFiltersCount = computed(() => {
+  let count = 0
+  if (searchQuery.value) count++
+  if (filterStatus.value) count++
+  if (filterDepartment.value) count++
+  return count
+})
+
+function clearOperatorFilters() {
+  searchQuery.value = ''
+  filterStatus.value = ''
+  filterDepartment.value = ''
+}
 
 const statusColors = {
   online: 'bg-green-500',
@@ -289,30 +305,61 @@ onMounted(fetchData)
     </div>
 
     <!-- Filters -->
-    <div class="card card-body">
-      <div class="flex flex-col sm:flex-row gap-4">
-        <div class="flex-1 relative">
-          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="input pl-10"
-            placeholder="Buscar por nome ou email..."
-          />
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50/80 border-b border-gray-100">
+        <div class="flex items-center gap-2 text-gray-600">
+          <Filter class="w-4 h-4" />
+          <span class="text-sm font-semibold">Filtros</span>
+          <span
+            v-if="activeFiltersCount > 0"
+            class="ml-1 w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center"
+          >
+            {{ activeFiltersCount }}
+          </span>
         </div>
-        <select v-model="filterStatus" class="select w-40">
-          <option value="">Todos os status</option>
-          <option value="online">Online</option>
-          <option value="away">Ausente</option>
-          <option value="busy">Ocupado</option>
-          <option value="offline">Offline</option>
-        </select>
-        <select v-model="filterDepartment" class="select w-48">
-          <option value="">Todos os departamentos</option>
-          <option v-for="dept in departments" :key="dept._id" :value="dept._id">
-            {{ dept.name }}
-          </option>
-        </select>
+        <button
+          v-if="activeFiltersCount > 0"
+          @click="clearOperatorFilters"
+          class="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1 transition-colors"
+        >
+          <X class="w-3.5 h-3.5" />
+          Limpar filtros
+        </button>
+      </div>
+      <div class="p-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="sm:col-span-2">
+            <label class="label">Buscar</label>
+            <div class="relative">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                class="input pl-10"
+                placeholder="Buscar por nome ou email..."
+              />
+            </div>
+          </div>
+          <div>
+            <label class="label">Status</label>
+            <select v-model="filterStatus" class="select">
+              <option value="">Todos os status</option>
+              <option value="online">Online</option>
+              <option value="away">Ausente</option>
+              <option value="busy">Ocupado</option>
+              <option value="offline">Offline</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Departamento</label>
+            <select v-model="filterDepartment" class="select">
+              <option value="">Todos</option>
+              <option v-for="dept in departments" :key="dept._id" :value="dept._id">
+                {{ dept.name }}
+              </option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
 

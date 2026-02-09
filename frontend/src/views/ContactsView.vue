@@ -7,7 +7,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import EditContactModal from '@/components/contacts/EditContactModal.vue'
 import CreateContactModal from '@/components/contacts/CreateContactModal.vue'
-import { Search, Users, Phone, MessageSquare, Clock, User, Tag, Pencil, MessageCircle, X, Plus, Trash2 } from 'lucide-vue-next'
+import { Search, Users, Phone, MessageSquare, Clock, User, Tag, Pencil, MessageCircle, X, Plus, Trash2, Filter } from 'lucide-vue-next'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useToast } from 'vue-toastification'
@@ -451,22 +451,31 @@ onMounted(() => {
     </div>
 
     <!-- Barra de pesquisa -->
-    <div class="card card-body shadow-sm">
-      <div class="flex flex-col sm:flex-row gap-4">
-        <div class="flex-1 relative">
-          <Search class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            v-model="search"
-            @input="handleSearch"
-            type="text"
-            placeholder="Buscar por nome ou número..."
-            class="input pl-12 py-3 text-base bg-gray-50 border-gray-200 focus:bg-white transition-colors"
-          />
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50/80 border-b border-gray-100">
+        <div class="flex items-center gap-2 text-gray-600">
+          <Filter class="w-4 h-4" />
+          <span class="text-sm font-semibold">Filtros</span>
         </div>
-        <div class="flex items-center gap-2 text-sm text-gray-500 px-4 py-2 bg-gray-50 rounded-lg">
+        <div class="flex items-center gap-2 text-sm text-gray-500">
           <User class="w-4 h-4" />
           <span class="font-medium">{{ pagination.total }}</span>
           <span>contatos</span>
+        </div>
+      </div>
+      <div class="p-5">
+        <div>
+          <label class="label">Buscar</label>
+          <div class="relative">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              v-model="search"
+              @input="handleSearch"
+              type="text"
+              placeholder="Buscar por nome ou número..."
+              class="input pl-10"
+            />
+          </div>
         </div>
       </div>
     </div>

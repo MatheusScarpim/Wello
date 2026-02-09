@@ -3,12 +3,13 @@ import { Request, Response, Router } from 'express'
 import WhatsAppManager from '@/core/whatsapp/WhatsAppManager'
 
 const router = Router()
+const isMultiInstanceMode = process.env.WHATSAPP_MULTI_INSTANCE === 'true'
 
 /**
- * Rotas de controle do WhatsApp
+ * Rotas de controle do WhatsApp (legacy single-instance)
  */
 
-// Status da conexão
+// Status da conexao legacy
 router.get('/status', async (req: Request, res: Response) => {
   try {
     const status = await WhatsAppManager.getStatus()
@@ -25,8 +26,16 @@ router.get('/status', async (req: Request, res: Response) => {
   }
 })
 
-// QR Code
+// QR Code legacy
 router.get('/qrcode', (req: Request, res: Response) => {
+  if (isMultiInstanceMode) {
+    return res.status(400).json({
+      success: false,
+      error:
+        'Endpoint legado desabilitado no modo multi-instancia. Use /api/whatsapp/instances/:id/qrcode',
+    })
+  }
+
   if (WhatsAppManager.isConnected()) {
     return res.status(200).json({
       success: true,
@@ -34,7 +43,7 @@ router.get('/qrcode', (req: Request, res: Response) => {
         connected: true,
         qrCode: null,
       },
-      message: 'WhatsApp já está conectado',
+      message: 'WhatsApp ja esta conectado',
     })
   }
 
@@ -48,13 +57,21 @@ router.get('/qrcode', (req: Request, res: Response) => {
     },
     message: qrCode
       ? undefined
-      : 'QR Code ainda não disponível. Aguarde alguns segundos.',
+      : 'QR Code ainda nao disponivel. Aguarde alguns segundos.',
   })
 })
 
-// Força reconexão
+// Forca reconexao legacy
 router.post('/reconnect', async (req: Request, res: Response) => {
   try {
+    if (isMultiInstanceMode) {
+      return res.status(400).json({
+        success: false,
+        error:
+          'Endpoint legado desabilitado no modo multi-instancia. Use /api/whatsapp/instances/:id/connect',
+      })
+    }
+
     if (WhatsAppManager.isConnected()) {
       await WhatsAppManager.disconnect()
     }
@@ -63,7 +80,7 @@ router.post('/reconnect', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: 'Reconexão iniciada',
+      message: 'Reconexao iniciada',
     })
   } catch (error: any) {
     res.status(500).json({
@@ -73,9 +90,17 @@ router.post('/reconnect', async (req: Request, res: Response) => {
   }
 })
 
-// Desconecta
+// Desconecta legacy
 router.post('/disconnect', async (req: Request, res: Response) => {
   try {
+    if (isMultiInstanceMode) {
+      return res.status(400).json({
+        success: false,
+        error:
+          'Endpoint legado desabilitado no modo multi-instancia. Use /api/whatsapp/instances/:id/disconnect',
+      })
+    }
+
     await WhatsAppManager.disconnect()
 
     res.json({

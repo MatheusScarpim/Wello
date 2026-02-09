@@ -134,6 +134,12 @@ export const useWhitelabelStore = defineStore('whitelabel', () => {
     }
     root.style.setProperty('--border-radius', radiusMap[theme.borderRadius])
 
+    // Update PWA theme-color
+    const metaTheme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    if (metaTheme) {
+      metaTheme.content = theme.primaryColor
+    }
+
     // Apply custom CSS if present
     if (settings.value.customCss) {
       let styleEl = document.getElementById('whitelabel-custom-css')

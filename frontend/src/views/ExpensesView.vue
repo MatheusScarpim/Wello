@@ -9,7 +9,9 @@ import {
   Calendar,
   DollarSign,
   FileSpreadsheet,
-  Building
+  Building,
+  Filter,
+  X
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -42,6 +44,19 @@ const weeklyDate = ref(format(new Date(), 'yyyy-MM-dd'))
 const showFormModal = ref(false)
 const editingExpense = ref<Expense | null>(null)
 const showWeeklySheet = ref(false)
+
+const activeFiltersCount = computed(() => {
+  let count = 0
+  if (search.value) count++
+  if (clientFilter.value) count++
+  return count
+})
+
+function clearExpenseFilters() {
+  search.value = ''
+  clientFilter.value = ''
+  fetchExpenses()
+}
 
 const totalValue = computed(() => {
   return expenses.value.reduce((sum, exp) => sum + exp.valor, 0)
@@ -226,29 +241,60 @@ onMounted(fetchExpenses)
     </div>
 
     <!-- Filters -->
-    <div class="card card-body">
-      <div class="flex flex-col sm:flex-row gap-4">
-        <div class="flex-1 relative">
-          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            v-model="search"
-            @input="fetchExpenses"
-            type="text"
-            placeholder="Buscar despesas..."
-            class="input pl-10"
-          />
+    <div class="card overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50/80 border-b border-gray-100">
+        <div class="flex items-center gap-2 text-gray-600">
+          <Filter class="w-4 h-4" />
+          <span class="text-sm font-semibold">Filtros</span>
+          <span
+            v-if="activeFiltersCount > 0"
+            class="ml-1 w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center"
+          >
+            {{ activeFiltersCount }}
+          </span>
         </div>
-        <select v-model="clientFilter" @change="fetchExpenses" class="select w-48">
-          <option value="">Todos os clientes</option>
-          <option v-for="client in clients" :key="client" :value="client">
-            {{ client }}
-          </option>
-        </select>
-        <input
-          v-model="weeklyDate"
-          type="date"
-          class="input w-40"
-        />
+        <button
+          v-if="activeFiltersCount > 0"
+          @click="clearExpenseFilters"
+          class="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1 transition-colors"
+        >
+          <X class="w-3.5 h-3.5" />
+          Limpar filtros
+        </button>
+      </div>
+      <div class="p-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="sm:col-span-2">
+            <label class="label">Buscar</label>
+            <div class="relative">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                v-model="search"
+                @input="fetchExpenses"
+                type="text"
+                placeholder="Buscar despesas..."
+                class="input pl-10"
+              />
+            </div>
+          </div>
+          <div>
+            <label class="label">Cliente</label>
+            <select v-model="clientFilter" @change="fetchExpenses" class="select">
+              <option value="">Todos os clientes</option>
+              <option v-for="client in clients" :key="client" :value="client">
+                {{ client }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Data referência</label>
+            <input
+              v-model="weeklyDate"
+              type="date"
+              class="input"
+            />
+          </div>
+        </div>
       </div>
     </div>
 

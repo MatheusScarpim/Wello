@@ -384,24 +384,48 @@ onUnmounted(() => {
     </div>
 
     <!-- Desktop Filters -->
-    <div class="hidden lg:block card card-body mb-6">
-      <div class="flex flex-col sm:flex-row gap-4">
-        <div class="flex items-center gap-2">
-          <Filter class="w-5 h-5 text-gray-400" />
-          <span class="text-sm font-medium text-gray-700">Filtros:</span>
+    <div class="hidden lg:block card overflow-hidden mb-6">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50/80 border-b border-gray-100">
+        <div class="flex items-center gap-2 text-gray-600">
+          <Filter class="w-4 h-4" />
+          <span class="text-sm font-semibold">Filtros</span>
+          <span
+            v-if="activeFiltersCount > 0"
+            class="ml-1 w-5 h-5 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center"
+          >
+            {{ activeFiltersCount }}
+          </span>
         </div>
-        <select v-model="filterStatus" @change="fetchData" class="select w-40">
-          <option value="">Todos os status</option>
-          <option value="waiting">Aguardando</option>
-          <option value="assigned">Atribuído</option>
-          <option value="in_progress">Em atendimento</option>
-        </select>
-        <select v-model="filterDepartment" @change="fetchData" class="select w-48">
-          <option value="">Todos os departamentos</option>
-          <option v-for="dept in departments" :key="dept._id" :value="dept._id">
-            {{ dept.name }}
-          </option>
-        </select>
+        <button
+          v-if="activeFiltersCount > 0"
+          @click="clearFilters"
+          class="text-xs text-gray-500 hover:text-primary-600 flex items-center gap-1 transition-colors"
+        >
+          <X class="w-3.5 h-3.5" />
+          Limpar filtros
+        </button>
+      </div>
+      <div class="p-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="label">Status</label>
+            <select v-model="filterStatus" @change="fetchData" class="select">
+              <option value="">Todos os status</option>
+              <option value="waiting">Aguardando</option>
+              <option value="assigned">Atribuído</option>
+              <option value="in_progress">Em atendimento</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Departamento</label>
+            <select v-model="filterDepartment" @change="fetchData" class="select">
+              <option value="">Todos os departamentos</option>
+              <option v-for="dept in departments" :key="dept._id" :value="dept._id">
+                {{ dept.name }}
+              </option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
 

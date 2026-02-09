@@ -36,6 +36,16 @@ export interface MetaIncomingMessage {
     originalUrl?: string
   }
   _rawMediaId?: string // ID da mídia na Meta (para download posterior se necessário)
+  _sessionName?: string
+  _instanceName?: string
+}
+
+export interface MetaValidationResult {
+  valid: boolean
+  phoneNumberId?: string
+  displayPhoneNumber?: string
+  verifiedName?: string
+  error?: string
 }
 
 /**
@@ -376,6 +386,10 @@ export class MetaManager extends EventEmitter {
       type: 'contacts',
       contacts: [
         {
+          name: {
+            formatted_name: phoneNumber,
+            first_name: phoneNumber,
+          },
           phones: [
             {
               phone: phoneNumber,
@@ -500,12 +514,23 @@ export class MetaManager extends EventEmitter {
     const form = new FormData()
     form.append('messaging_product', 'whatsapp')
 
-    // Se for base64, converte para buffer
+    // Se for string, aceita URL HTTP, data URL ou base64 puro
     let buffer: Buffer
     if (typeof content === 'string') {
-      // Remove prefixo data:image/png;base64,
-      const base64Data = content.replace(/^data:.+;base64,/, '')
-      buffer = Buffer.from(base64Data, 'base64')
+      if (this.isHttpUrl(content)) {
+        const downloaded = await axios.get(content, {
+          responseType: 'arraybuffer',
+          timeout: 120000,
+          maxContentLength: 200 * 1024 * 1024,
+          maxBodyLength: 200 * 1024 * 1024,
+        })
+        buffer = Buffer.from(downloaded.data)
+      } else if (this.isDataUrl(content)) {
+        const base64Data = content.replace(/^data:.+;base64,/, '')
+        buffer = Buffer.from(base64Data, 'base64')
+      } else {
+        buffer = Buffer.from(content, 'base64')
+      }
     } else {
       buffer = content
     }
@@ -590,6 +615,8 @@ export class MetaManager extends EventEmitter {
    */
   public async processWebhookMessage(
     webhookBody: any,
+    customConfig?: Partial<MetaConfig>,
+    context?: { sessionName?: string; instanceName?: string },
   ): Promise<MetaIncomingMessage | null> {
     try {
       if (
@@ -602,7 +629,9 @@ export class MetaManager extends EventEmitter {
 
       const entry = webhookBody.entry[0].changes[0].value.messages[0]
       const metadata = webhookBody.entry[0].changes[0].value.metadata
-      const contact = webhookBody.entry[0].changes[0].value.contacts[0]
+      const contact = webhookBody.entry[0].changes[0].value.contacts?.[0]
+      const mediaAccessToken =
+        customConfig?.accessToken || this.defaultConfig.accessToken
 
       const message = this.extractMessageContent(entry)
       if (entry.type === 'interactive') {
@@ -629,13 +658,13 @@ export class MetaManager extends EventEmitter {
         if (rawMediaId) {
           // Baixa a URL da mídia da Meta
           try {
-            const mediaInfo = await this.getMediaUrl(rawMediaId)
+            const mediaInfo = await this.getMediaUrl(rawMediaId, customConfig)
             if (mediaInfo) {
               // Faz upload para o Azure
               mediaData = await MediaProcessor.processMetaMedia(
                 mediaInfo.url,
                 mediaType,
-                this.defaultConfig.accessToken,
+                mediaAccessToken,
                 {
                   messageId: entry.id,
                   from: entry.from,
@@ -655,13 +684,15 @@ export class MetaManager extends EventEmitter {
         message: message.content,
         idMessage: entry.id,
         quotedMsg: entry.context?.id,
-        name: contact.profile.name,
+        name: contact?.profile?.name || entry.from,
         provider: 'meta_whatsapp',
-        identifierProvider: metadata.display_phone_number,
+        identifierProvider: metadata?.display_phone_number,
         type: message.type,
         mediaUrl: mediaData?.mediaUrl,
         mediaStorage: mediaData?.mediaStorage,
         _rawMediaId: rawMediaId || undefined,
+        _sessionName: context?.sessionName,
+        _instanceName: context?.instanceName,
       }
     } catch (error) {
       console.error('❌ Erro ao processar webhook:', error)
@@ -674,9 +705,11 @@ export class MetaManager extends EventEmitter {
    */
   private async getMediaUrl(
     mediaId: string,
+    customConfig?: Partial<MetaConfig>,
   ): Promise<{ url: string; mimeType: string } | null> {
     try {
-      const infoResponse = await this.defaultAxiosInstance.get(`/${mediaId}`)
+      const { axiosInstance } = this.getConfigAndInstance(customConfig)
+      const infoResponse = await axiosInstance.get(`/${mediaId}`)
       return {
         url: infoResponse.data.url,
         mimeType: infoResponse.data.mime_type,
@@ -741,26 +774,8 @@ export class MetaManager extends EventEmitter {
    * Normaliza número de telefone
    */
   private normalizePhoneNumber(phone: string): string {
-    const countryCode = '55'
-    let formatted = phone
-
-    // Remove código do país se presente
-    if (formatted.startsWith(countryCode)) {
-      formatted = formatted.substring(countryCode.length)
-    }
-
-    // Pega DDD (2 primeiros dígitos)
-    const areaCode = formatted.substring(0, 2)
-    let number = formatted.substring(2)
-
-    // Adiciona 9 se necessário (celular sem 9)
-    if (number.length === 8 && /^[987]/.test(number)) {
-      number = '9' + number
-    }
-
-    return countryCode + areaCode + number
+    return phone.replace(/\D/g, '')
   }
-
   /**
    * Helper: extensão por tipo
    */
@@ -790,9 +805,53 @@ export class MetaManager extends EventEmitter {
   /**
    * Retorna configuração atual
    */
+
+  public async validateCredentials(
+    customConfig?: Partial<MetaConfig>,
+  ): Promise<MetaValidationResult> {
+    try {
+      const { config, axiosInstance } = this.getConfigAndInstance(customConfig)
+      if (!config.accessToken || !config.phoneNumberId) {
+        return {
+          valid: false,
+          error: 'Credenciais incompletas (access token e phoneNumberId)',
+        }
+      }
+
+      const response = await axiosInstance.get(`/${config.phoneNumberId}`, {
+        params: {
+          fields: 'id,display_phone_number,verified_name',
+        },
+      })
+
+      return {
+        valid: true,
+        phoneNumberId: response.data?.id || config.phoneNumberId,
+        displayPhoneNumber: response.data?.display_phone_number,
+        verifiedName: response.data?.verified_name,
+      }
+    } catch (error: any) {
+      const apiMessage =
+        error?.response?.data?.error?.message || error?.message || 'Erro desconhecido'
+      return {
+        valid: false,
+        error: apiMessage,
+      }
+    }
+  }
+
+  private isHttpUrl(value: string): boolean {
+    return /^https?:\/\//i.test(value)
+  }
+
+  private isDataUrl(value: string): boolean {
+    return /^data:/i.test(value)
+  }
+
   public getConfig(): Readonly<MetaConfig> {
     return { ...this.defaultConfig }
   }
 }
 
 export default MetaManager.getInstance()
+

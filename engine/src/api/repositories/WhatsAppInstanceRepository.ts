@@ -9,6 +9,17 @@ export type InstanceStatus =
   | 'connected'
   | 'error'
 
+export type InstanceConnectionType = 'wppconnect' | 'meta_official'
+
+export interface MetaInstanceConfig {
+  enabled: boolean
+  accessToken?: string
+  phoneNumberId?: string
+  instagramAccountId?: string
+  apiVersion?: string
+  baseUrl?: string
+}
+
 export interface AutomaticMessageConfig {
   enabled: boolean
   message: string
@@ -24,6 +35,7 @@ export interface IWhatsAppInstance {
   _id?: ObjectId
   name: string
   sessionName: string
+  connectionType?: InstanceConnectionType
   phoneNumber?: string
   profileName?: string
   status: InstanceStatus
@@ -35,6 +47,7 @@ export interface IWhatsAppInstance {
   botEnabled?: boolean
   botId?: string | null
   automaticMessages?: InstanceAutomaticMessages
+  metaConfig?: MetaInstanceConfig
   createdAt: Date
   updatedAt: Date
   lastConnectedAt?: Date
@@ -49,6 +62,26 @@ export class WhatsAppInstanceRepository extends BaseRepository<IWhatsAppInstance
     sessionName: string,
   ): Promise<IWhatsAppInstance | null> {
     return this.findOne({ sessionName })
+  }
+
+  async findByMetaPhoneNumberId(
+    phoneNumberId: string,
+  ): Promise<IWhatsAppInstance | null> {
+    return this.findOne({
+      connectionType: 'meta_official',
+      'metaConfig.enabled': true,
+      'metaConfig.phoneNumberId': phoneNumberId,
+    } as any)
+  }
+
+  async findByInstagramAccountId(
+    instagramAccountId: string,
+  ): Promise<IWhatsAppInstance | null> {
+    return this.findOne({
+      connectionType: 'meta_official',
+      'metaConfig.enabled': true,
+      'metaConfig.instagramAccountId': instagramAccountId,
+    } as any)
   }
 
   async findDefault(): Promise<IWhatsAppInstance | null> {
@@ -77,9 +110,22 @@ export class WhatsAppInstanceRepository extends BaseRepository<IWhatsAppInstance
 
     const instance: IWhatsAppInstance = {
       ...data,
+      connectionType: data.connectionType || 'wppconnect',
       fairDistributionEnabled: data.fairDistributionEnabled ?? false,
       botEnabled: data.botEnabled ?? true,
       botId: data.botId ?? null,
+      metaConfig:
+        data.metaConfig && data.metaConfig.enabled
+          ? {
+              enabled: true,
+              accessToken: data.metaConfig.accessToken,
+              phoneNumberId: data.metaConfig.phoneNumberId,
+              instagramAccountId: data.metaConfig.instagramAccountId,
+              apiVersion: data.metaConfig.apiVersion || process.env.META_API_VERSION || 'v17.0',
+              baseUrl:
+                data.metaConfig.baseUrl || process.env.URL_META || 'https://graph.facebook.com',
+            }
+          : data.metaConfig,
       createdAt: new Date(),
       updatedAt: new Date(),
     }

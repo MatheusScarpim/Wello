@@ -341,27 +341,42 @@ export class ConversationService {
     return await this.repository.findById(id)
   }
 
-  async getConversationByIdentifier(identifier: string, provider: string) {
+  async getConversationByIdentifier(
+    identifier: string,
+    provider: string,
+    sessionName?: string,
+  ) {
     return await this.repository.findOne({
       identifier,
       provider,
       archived: false,
+      ...(sessionName && { sessionName }),
     } as any)
   }
 
-  async getConversationActive(identifier: string, provider: string) {
+  async getConversationActive(
+    identifier: string,
+    provider: string,
+    sessionName?: string,
+  ) {
     return await this.repository.findOne({
       identifier,
       provider,
       status: 'active',
+      ...(sessionName && { sessionName }),
     } as any)
   }
 
-  async getConversationOpen(identifier: string, provider: string) {
+  async getConversationOpen(
+    identifier: string,
+    provider: string,
+    sessionName?: string,
+  ) {
     return await this.repository.findOne({
       identifier,
       provider,
       status: { $ne: 'finalized' },
+      ...(sessionName && { sessionName }),
     } as any)
   }
 
@@ -432,6 +447,7 @@ export class ConversationService {
     const existing = await this.getConversationOpen(
       identifier,
       provider,
+      sessionName,
     )
     if (existing) {
       return await this.ensureConversationReady(existing, {
@@ -504,6 +520,7 @@ export class ConversationService {
           const conflict = await this.repository.findOne({
             identifier,
             provider,
+            ...(sessionName && { sessionName }),
           } as any)
 
           if (conflict) {
