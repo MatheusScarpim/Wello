@@ -1,5 +1,5 @@
 /**
- * welloChat - Sistema de Automação WhatsApp
+ * ScarlatChat - Sistema de Automação WhatsApp
  * Versão 2.0 - Arquitetura Completamente Refatorada
  *
  * @author Pedro Kayami & Matheus Scarpim
@@ -26,7 +26,7 @@ async function bootstrap(): Promise<void> {
   try {
     console.log('╔════════════════════════════════════════╗')
     console.log('║                                        ║')
-    console.log('║           🚀 welloChat v2.0 🚀             ║')
+    console.log('║         🚀 ScarlatChat v2.0 🚀           ║')
     console.log('║     Sistema de Automação WhatsApp      ║')
     console.log('║                                        ║')
     console.log('╚════════════════════════════════════════╝')

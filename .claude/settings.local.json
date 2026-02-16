@@ -1,20 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs cat:*)",
-      "Bash(findstr:*)",
-      "Bash(grep:*)",
-      "Bash(npx vue-tsc:*)",
-      "Bash(npm install:*)",
-      "Bash(pnpm install:*)",
-      "Bash(xargs:*)",
-      "Bash(docker system prune:*)",
-      "Bash(docker-compose up:*)",
+      "Bash(git checkout:*)",
       "Bash(npx vite build:*)",
-      "Bash(cat:*)",
-      "Bash(git -C /c/Users/matheus.cuan/Documents/Github/Wello log --oneline --graph -15)",
-      "Bash(ls -la \"c:\\\\Users\\\\matheus.cuan\\\\Documents\\\\Github\\\\Wello\\\\frontend\\\\src\\\\types\"\" | grep -i \".ts \")",
-      "Bash(git rm:*)"
+      "WebFetch(domain:platform.openai.com)"
     ]
   }
 }

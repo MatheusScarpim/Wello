@@ -71,7 +71,7 @@ export async function prepareLocalMediaPayload(
   const { contentType, base64Data } = parseBase64Media(source)
   const extension =
     path.extname(filename || '') || getExtensionFromMime(contentType) || '.bin'
-  const tempFileName = `wello-media-${randomBytes(6).toString('hex')}${extension}`
+  const tempFileName = `scarlat-media-${randomBytes(6).toString('hex')}${extension}`
   const tempFilePath = path.join(os.tmpdir(), tempFileName)
 
   await fs.writeFile(tempFilePath, Buffer.from(base64Data, 'base64'))
@@ -82,7 +82,7 @@ export async function prepareLocalMediaPayload(
   )
 
   if (needsConversion) {
-    const oggFileName = `wello-media-${randomBytes(6).toString('hex')}.ogg`
+    const oggFileName = `scarlat-media-${randomBytes(6).toString('hex')}.ogg`
     const oggFilePath = path.join(os.tmpdir(), oggFileName)
 
     try {

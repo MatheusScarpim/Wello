@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useWhitelabelStore } from '@/stores/whitelabel'
-import { whitelabelApi, storageApi } from '@/api'
+import { whitelabelApi, storageApi, iaApi } from '@/api'
 import {
   Palette,
   Image,
@@ -13,7 +13,12 @@ import {
   Upload,
   Trash2,
   Eye,
-  Save
+  Save,
+  Mic,
+  Loader2,
+  Square,
+  ChevronDown,
+  Play
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
@@ -27,6 +32,201 @@ const isLoading = ref(true)
 const isSaving = ref(false)
 const showResetConfirm = ref(false)
 const showPreview = ref(false)
+
+// Voice Clone
+const isCloning = ref(false)
+const cloneVoiceName = ref('')
+const cloneAudioFile = ref<File | null>(null)
+
+// Audio Recording for Voice Clone
+const isRecordingClone = ref(false)
+const recordingCloneTime = ref(0)
+let cloneMediaRecorder: MediaRecorder | null = null
+let cloneAudioChunks: Blob[] = []
+let cloneRecordingInterval: number | null = null
+const cloneRecordedAudioUrl = ref('')
+
+// ElevenLabs Voices
+const elevenLabsVoices = ref<Array<{ voiceId: string; name: string; category: string; previewUrl?: string }>>([])
+const isLoadingVoices = ref(false)
+const showCloneSection = ref(false)
+const previewingVoiceId = ref('')
+let previewAudio: HTMLAudioElement | null = null
+
+async function fetchElevenLabsVoices() {
+  isLoadingVoices.value = true
+  try {
+    const response = await iaApi.listElevenLabsVoices()
+    elevenLabsVoices.value = response.data?.voices || []
+  } catch {
+    // Silencioso - se falhar, o usuário ainda pode colar o ID manualmente
+  } finally {
+    isLoadingVoices.value = false
+  }
+}
+
+function previewVoice(voice: { voiceId: string; previewUrl?: string }) {
+  if (!voice.previewUrl) return
+
+  if (previewAudio) {
+    previewAudio.pause()
+    previewAudio = null
+  }
+
+  if (previewingVoiceId.value === voice.voiceId) {
+    previewingVoiceId.value = ''
+    return
+  }
+
+  previewingVoiceId.value = voice.voiceId
+  previewAudio = new Audio(voice.previewUrl)
+  previewAudio.play()
+  previewAudio.onended = () => {
+    previewingVoiceId.value = ''
+  }
+}
+
+function selectVoice(voiceId: string) {
+  form.value.features!.elevenLabsVoiceId = voiceId
+}
+
+function handleCloneAudioChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  cloneAudioFile.value = target.files?.[0] || null
+  // Limpa gravação anterior se selecionou arquivo
+  if (cloneAudioFile.value && cloneRecordedAudioUrl.value) {
+    URL.revokeObjectURL(cloneRecordedAudioUrl.value)
+    cloneRecordedAudioUrl.value = ''
+  }
+}
+
+function getCloneSupportedMimeType(): { mimeType: string; extension: string } {
+  const types = [
+    { mimeType: 'audio/webm;codecs=opus', extension: 'webm' },
+    { mimeType: 'audio/webm', extension: 'webm' },
+    { mimeType: 'audio/mp4', extension: 'mp4' },
+    { mimeType: 'audio/ogg;codecs=opus', extension: 'ogg' },
+  ]
+  for (const type of types) {
+    if (MediaRecorder.isTypeSupported(type.mimeType)) return type
+  }
+  return { mimeType: '', extension: 'webm' }
+}
+
+async function startCloneRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const { mimeType } = getCloneSupportedMimeType()
+
+    let recorder: MediaRecorder
+    if (mimeType) {
+      recorder = new MediaRecorder(stream, { mimeType })
+    } else {
+      recorder = new MediaRecorder(stream)
+    }
+
+    cloneMediaRecorder = recorder
+    cloneAudioChunks = []
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) cloneAudioChunks.push(event.data)
+    }
+
+    recorder.onstop = () => {
+      const actualMimeType = recorder.mimeType || 'audio/webm'
+      const audioBlob = new Blob(cloneAudioChunks, { type: actualMimeType })
+
+      if (audioBlob.size === 0) {
+        toast.error('Nenhum áudio capturado. Verifique o microfone.')
+        stream.getTracks().forEach(track => track.stop())
+        return
+      }
+
+      const extMap: Record<string, string> = {
+        'audio/mp4': 'mp4',
+        'audio/webm': 'webm',
+        'audio/ogg': 'ogg',
+      }
+      const baseType = actualMimeType.split(';')[0].trim()
+      const ext = extMap[baseType] || 'webm'
+
+      const file = new File([audioBlob], `voz_clone_${Date.now()}.${ext}`, { type: actualMimeType })
+      cloneAudioFile.value = file
+
+      // URL para preview
+      if (cloneRecordedAudioUrl.value) URL.revokeObjectURL(cloneRecordedAudioUrl.value)
+      cloneRecordedAudioUrl.value = URL.createObjectURL(audioBlob)
+
+      toast.success('Áudio gravado com sucesso!')
+      stream.getTracks().forEach(track => track.stop())
+    }
+
+    recorder.start(500)
+    isRecordingClone.value = true
+    recordingCloneTime.value = 0
+    cloneRecordingInterval = window.setInterval(() => {
+      recordingCloneTime.value++
+    }, 1000)
+  } catch {
+    toast.error('Erro ao acessar microfone. Verifique as permissões.')
+  }
+}
+
+function stopCloneRecording() {
+  if (cloneMediaRecorder && isRecordingClone.value) {
+    if (cloneMediaRecorder.state === 'recording') {
+      cloneMediaRecorder.requestData()
+      cloneMediaRecorder.stop()
+    }
+    if (cloneRecordingInterval) {
+      clearInterval(cloneRecordingInterval)
+      cloneRecordingInterval = null
+    }
+    isRecordingClone.value = false
+  }
+}
+
+function discardCloneRecording() {
+  if (cloneRecordedAudioUrl.value) {
+    URL.revokeObjectURL(cloneRecordedAudioUrl.value)
+    cloneRecordedAudioUrl.value = ''
+  }
+  cloneAudioFile.value = null
+}
+
+function formatRecordingTime(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0')
+  const s = (seconds % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+}
+
+async function cloneVoice() {
+  if (!cloneAudioFile.value) {
+    toast.error('Grave ou selecione um arquivo de áudio')
+    return
+  }
+
+  isCloning.value = true
+  try {
+    const name = cloneVoiceName.value.trim() || 'Minha Voz'
+    const response = await iaApi.cloneVoice(cloneAudioFile.value, name)
+    if (response.data?.voiceId) {
+      form.value.features!.elevenLabsVoiceId = response.data.voiceId
+      toast.success(`Voz "${name}" clonada com sucesso!`)
+      cloneAudioFile.value = null
+      cloneVoiceName.value = ''
+      if (cloneRecordedAudioUrl.value) {
+        URL.revokeObjectURL(cloneRecordedAudioUrl.value)
+        cloneRecordedAudioUrl.value = ''
+      }
+    }
+  } catch (error: any) {
+    const msg = error?.response?.data?.error || 'Erro ao clonar voz'
+    toast.error(msg)
+  } finally {
+    isCloning.value = false
+  }
+}
 
 // Form
 const form = ref<Partial<WhitelabelSettings>>({
@@ -61,7 +261,11 @@ const form = ref<Partial<WhitelabelSettings>>({
     enableNotes: true,
     maxDepartments: 10,
     maxOperators: 50,
-    showOperatorNameInMessages: false
+    showOperatorNameInMessages: false,
+    defaultTtsVoice: 'nova',
+    ttsModel: 'tts-1',
+    ttsProvider: 'openai',
+    elevenLabsVoiceId: ''
   },
   customCss: ''
 })
@@ -135,6 +339,13 @@ function removeLogo(type: 'logo' | 'logoSmall' | 'favicon' | 'loginBackground') 
 }
 
 // Auto-generate dark/light variants from primary color
+// Carrega vozes ElevenLabs quando provedor muda para elevenlabs
+watch(() => form.value.features?.ttsProvider, (provider) => {
+  if (provider === 'elevenlabs' && elevenLabsVoices.value.length === 0) {
+    fetchElevenLabsVoices()
+  }
+})
+
 watch(() => form.value.theme?.primaryColor, (newColor) => {
   if (newColor && form.value.theme) {
     // Simple darkening/lightening (in production, use a proper color lib)
@@ -555,6 +766,207 @@ onMounted(fetchSettings)
                   <label class="label">Máx. Operadores</label>
                   <input v-model.number="form.features!.maxOperators" type="number" min="1" class="input" />
                 </div>
+              </div>
+
+              <div class="mt-4 pt-4 border-t border-gray-200 space-y-4">
+                <h4 class="text-sm font-semibold text-gray-700">Text-to-Speech (TTS)</h4>
+                <div>
+                  <label class="label">Provedor</label>
+                  <select v-model="form.features!.ttsProvider" class="input">
+                    <option value="openai">OpenAI - Boa qualidade, preço acessível</option>
+                    <option value="elevenlabs">ElevenLabs - Vozes ultra-realistas, clonagem de voz</option>
+                  </select>
+                </div>
+
+                <!-- OpenAI Options -->
+                <template v-if="form.features!.ttsProvider === 'openai'">
+                  <div>
+                    <label class="label">Qualidade</label>
+                    <select v-model="form.features!.ttsModel" class="input">
+                      <option value="tts-1">Padrão - Mais rápido ($0.015/1k chars)</option>
+                      <option value="tts-1-hd">HD - Qualidade superior ($0.030/1k chars)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="label">Voz Padrão</label>
+                    <select v-model="form.features!.defaultTtsVoice" class="input">
+                      <option value="nova">Nova - Feminina, natural</option>
+                      <option value="alloy">Alloy - Neutra, versátil</option>
+                      <option value="echo">Echo - Masculina, suave</option>
+                      <option value="fable">Fable - Masculina, narrativa</option>
+                      <option value="onyx">Onyx - Masculina, grave</option>
+                      <option value="shimmer">Shimmer - Feminina, clara</option>
+                    </select>
+                  </div>
+                </template>
+
+                <!-- ElevenLabs Options -->
+                <template v-if="form.features!.ttsProvider === 'elevenlabs'">
+                  <!-- Selecionar voz -->
+                  <div>
+                    <label class="label">Voz</label>
+                    <div class="flex gap-2">
+                      <select
+                        v-model="form.features!.elevenLabsVoiceId"
+                        class="input flex-1"
+                      >
+                        <option value="">Selecione uma voz...</option>
+                        <optgroup label="Vozes pré-prontas" v-if="elevenLabsVoices.filter(v => v.category === 'premade').length">
+                          <option
+                            v-for="voice in elevenLabsVoices.filter(v => v.category === 'premade')"
+                            :key="voice.voiceId"
+                            :value="voice.voiceId"
+                          >
+                            {{ voice.name }}
+                          </option>
+                        </optgroup>
+                        <optgroup label="Suas vozes" v-if="elevenLabsVoices.filter(v => v.category !== 'premade').length">
+                          <option
+                            v-for="voice in elevenLabsVoices.filter(v => v.category !== 'premade')"
+                            :key="voice.voiceId"
+                            :value="voice.voiceId"
+                          >
+                            {{ voice.name }}
+                          </option>
+                        </optgroup>
+                      </select>
+                      <button
+                        @click="fetchElevenLabsVoices"
+                        :disabled="isLoadingVoices"
+                        type="button"
+                        class="px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-all"
+                        title="Atualizar lista de vozes"
+                      >
+                        <Loader2 v-if="isLoadingVoices" class="w-4 h-4 animate-spin" />
+                        <RefreshCw v-else class="w-4 h-4" />
+                      </button>
+                    </div>
+                    <!-- Preview da voz selecionada -->
+                    <div v-if="form.features!.elevenLabsVoiceId && elevenLabsVoices.length" class="mt-2">
+                      <button
+                        v-if="elevenLabsVoices.find(v => v.voiceId === form.features!.elevenLabsVoiceId)?.previewUrl"
+                        @click="previewVoice(elevenLabsVoices.find(v => v.voiceId === form.features!.elevenLabsVoiceId)!)"
+                        type="button"
+                        class="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
+                      >
+                        <Play class="w-3 h-3" />
+                        {{ previewingVoiceId === form.features!.elevenLabsVoiceId ? 'Reproduzindo...' : 'Ouvir preview' }}
+                      </button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">
+                      Clique em atualizar para carregar as vozes da sua conta ElevenLabs.
+                      Você também pode colar um Voice ID manualmente.
+                    </p>
+                  </div>
+
+                  <!-- Clonar voz (opcional, colapsável) -->
+                  <div class="border border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                      @click="showCloneSection = !showCloneSection"
+                      type="button"
+                      class="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-all"
+                    >
+                      <span class="text-sm font-medium text-gray-700 flex items-center gap-2">
+                        <Mic class="w-4 h-4" />
+                        Clonar minha voz (opcional)
+                      </span>
+                      <ChevronDown
+                        class="w-4 h-4 text-gray-400 transition-transform"
+                        :class="{ 'rotate-180': showCloneSection }"
+                      />
+                    </button>
+                    <div v-if="showCloneSection" class="p-4 space-y-3 border-t border-gray-200">
+                      <p class="text-xs text-gray-500">
+                        Requer plano Starter ou superior na ElevenLabs.
+                      </p>
+                      <div>
+                        <label class="label">Nome da voz</label>
+                        <input
+                          v-model="cloneVoiceName"
+                          type="text"
+                          class="input"
+                          placeholder="Ex: Matheus, Atendente..."
+                        />
+                      </div>
+
+                      <!-- Gravar áudio ou enviar arquivo -->
+                      <div>
+                        <label class="label">Áudio da sua voz (mín. 30s)</label>
+
+                        <div v-if="!isRecordingClone && !cloneRecordedAudioUrl" class="flex flex-col gap-2">
+                          <div class="flex gap-2">
+                            <button
+                              @click="startCloneRecording"
+                              type="button"
+                              class="flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-medium hover:bg-red-50 transition-all"
+                            >
+                              <Mic class="w-4 h-4" />
+                              Gravar áudio
+                            </button>
+                            <span class="text-xs text-gray-400 self-center">ou</span>
+                            <label class="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-medium hover:bg-gray-50 cursor-pointer transition-all">
+                              <Upload class="w-4 h-4" />
+                              Enviar arquivo
+                              <input
+                                type="file"
+                                accept="audio/*"
+                                @change="handleCloneAudioChange"
+                                class="hidden"
+                              />
+                            </label>
+                          </div>
+                          <div v-if="cloneAudioFile && !cloneRecordedAudioUrl" class="flex items-center gap-2 text-sm text-gray-600">
+                            <span>{{ cloneAudioFile.name }}</span>
+                            <button @click="cloneAudioFile = null" class="text-red-500 hover:text-red-700 text-xs">&times;</button>
+                          </div>
+                        </div>
+
+                        <div v-if="isRecordingClone" class="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                          <span class="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                          <span class="text-sm font-medium text-red-700">Gravando {{ formatRecordingTime(recordingCloneTime) }}</span>
+                          <button
+                            @click="stopCloneRecording"
+                            type="button"
+                            class="ml-auto flex items-center gap-1 px-3 py-1 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-all"
+                          >
+                            <Square class="w-3 h-3" />
+                            Parar
+                          </button>
+                        </div>
+
+                        <div v-if="cloneRecordedAudioUrl && !isRecordingClone" class="flex flex-col gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                          <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium text-green-700">Áudio gravado</span>
+                            <button
+                              @click="discardCloneRecording"
+                              type="button"
+                              class="ml-auto text-xs text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 class="w-3 h-3 inline" /> Descartar
+                            </button>
+                          </div>
+                          <audio :src="cloneRecordedAudioUrl" controls class="w-full h-8" />
+                        </div>
+                      </div>
+
+                      <button
+                        @click="cloneVoice"
+                        :disabled="!cloneAudioFile || isCloning"
+                        class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        <Loader2 v-if="isCloning" class="w-4 h-4 animate-spin" />
+                        <Mic v-else class="w-4 h-4" />
+                        {{ isCloning ? 'Clonando...' : 'Clonar Voz' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p class="text-xs text-amber-700">
+                      Configure a variável <strong>ELEVENLABS_API_KEY</strong> no .env do servidor para usar este provedor.
+                    </p>
+                  </div>
+                </template>
               </div>
             </div>
           </div>

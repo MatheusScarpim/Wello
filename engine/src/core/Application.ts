@@ -69,7 +69,7 @@ export class Application {
     }
 
     try {
-      console.log('🚀 Iniciando welloChat...')
+      console.log('🚀 Iniciando ScarlatChat...')
 
       // 1. Conecta ao banco de dados
       await this.initializeDatabase()
@@ -94,7 +94,7 @@ export class Application {
       fairDistributionService.start()
 
       this.isInitialized = true
-      console.log('✅ welloChat inicializado com sucesso!')
+      console.log('✅ ScarlatChat inicializado com sucesso!')
     } catch (error) {
       console.error('❌ Erro ao inicializar aplicação:', error)
       throw error

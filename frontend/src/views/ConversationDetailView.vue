@@ -36,7 +36,8 @@ import {
   Pause,
   Wand2,
   Zap,
-  StickyNote
+  StickyNote,
+  Volume2
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import AuraResponseCard from '@/components/aura/AuraResponseCard.vue'
@@ -189,6 +190,195 @@ const mediaRecorder = ref<MediaRecorder | null>(null)
 const audioChunks = ref<Blob[]>([])
 let recordingInterval: number | null = null
 let recordingCancelled = false
+
+// TTS (Text-to-Speech)
+const isGeneratingTts = ref(false)
+const ttsAudioBase64 = ref('')
+const showTtsPreview = ref(false)
+const ttsVoice = ref(whitelabelStore.features?.defaultTtsVoice || 'nova')
+const ttsVoiceOptions = [
+  { value: 'nova', label: 'Nova' },
+  { value: 'alloy', label: 'Alloy' },
+  { value: 'echo', label: 'Echo' },
+  { value: 'fable', label: 'Fable' },
+  { value: 'onyx', label: 'Onyx' },
+  { value: 'shimmer', label: 'Shimmer' },
+]
+
+// Audio playback
+const audioPlayers = ref<Map<string, HTMLAudioElement>>(new Map())
+const audioStates = ref<Map<string, { playing: boolean; currentTime: number; duration: number }>>(new Map())
+
+function getAudioState(id: string) {
+  if (!audioStates.value.has(id)) audioStates.value.set(id, { playing: false, currentTime: 0, duration: 0 })
+  return audioStates.value.get(id)!
+}
+
+function toggleAudio(id: string, url: string) {
+  let a = audioPlayers.value.get(id)
+  if (!a) {
+    a = new Audio(url)
+    audioPlayers.value.set(id, a)
+    a.addEventListener('loadedmetadata', () => { getAudioState(id).duration = a!.duration; audioStates.value = new Map(audioStates.value) })
+    a.addEventListener('timeupdate', () => { getAudioState(id).currentTime = a!.currentTime; audioStates.value = new Map(audioStates.value) })
+    a.addEventListener('ended', () => { const s = getAudioState(id); s.playing = false; s.currentTime = 0; audioStates.value = new Map(audioStates.value) })
+  }
+  const st = getAudioState(id)
+  if (st.playing) { a.pause(); st.playing = false }
+  else {
+    audioPlayers.value.forEach((o, oid) => { if (oid !== id) { o.pause(); getAudioState(oid).playing = false } })
+    a.play(); st.playing = true
+  }
+  audioStates.value = new Map(audioStates.value)
+}
+
+function seekAudio(id: string, e: MouseEvent) {
+  const a = audioPlayers.value.get(id)
+  if (!a?.duration) return
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  a.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * a.duration
+  getAudioState(id).currentTime = a.currentTime
+  audioStates.value = new Map(audioStates.value)
+}
+
+function fmtTime(s: number) { if (!s || !isFinite(s)) return '0:00'; return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}` }
+
+// Audio transcription (speech-to-text)
+const audioTranscriptions = ref<Map<string, string>>(new Map())
+const transcribingIds = ref<Set<string>>(new Set())
+
+async function transcribeAudio(msgId: string, mediaUrl: string) {
+  if (transcribingIds.value.has(msgId)) return
+  transcribingIds.value = new Set([...transcribingIds.value, msgId])
+  try {
+    const resp = await fetch(mediaUrl)
+    const blob = await resp.blob()
+    const ext = mediaUrl.split('.').pop()?.split('?')[0] || 'webm'
+    const result = await iaApi.speechToText(blob, `audio.${ext}`)
+    if (result.data?.text) {
+      audioTranscriptions.value = new Map(audioTranscriptions.value.set(msgId, result.data.text))
+    }
+  } catch (err) {
+    console.error('Transcription error:', err)
+    toast.error('Erro ao transcrever áudio')
+  } finally {
+    transcribingIds.value.delete(msgId)
+    transcribingIds.value = new Set(transcribingIds.value)
+  }
+}
+
+// Audio preview (after recording / selecting file)
+const previewAudio = ref<HTMLAudioElement | null>(null)
+const previewPlaying = ref(false)
+const previewCurrentTime = ref(0)
+const previewDuration = ref(0)
+const trimStart = ref(0)
+const trimEnd = ref(0)
+
+function initPreviewAudio(src: string) {
+  cleanupPreviewAudio()
+  const a = new Audio(src)
+  previewAudio.value = a
+  previewPlaying.value = false
+  previewCurrentTime.value = 0
+  a.addEventListener('loadedmetadata', () => { previewDuration.value = a.duration; trimEnd.value = a.duration })
+  a.addEventListener('timeupdate', () => {
+    previewCurrentTime.value = a.currentTime
+    if (a.currentTime >= trimEnd.value) { a.pause(); previewPlaying.value = false; a.currentTime = trimStart.value; previewCurrentTime.value = trimStart.value }
+  })
+  a.addEventListener('ended', () => { previewPlaying.value = false; a.currentTime = trimStart.value; previewCurrentTime.value = trimStart.value })
+}
+
+function cleanupPreviewAudio() {
+  if (previewAudio.value) { previewAudio.value.pause(); previewAudio.value = null }
+  previewPlaying.value = false; previewCurrentTime.value = 0; previewDuration.value = 0; trimStart.value = 0; trimEnd.value = 0
+}
+
+function togglePreviewAudio() {
+  const a = previewAudio.value
+  if (!a) return
+  if (previewPlaying.value) { a.pause(); previewPlaying.value = false }
+  else { if (a.currentTime < trimStart.value || a.currentTime >= trimEnd.value) a.currentTime = trimStart.value; a.play(); previewPlaying.value = true }
+}
+
+function seekPreviewAudio(e: MouseEvent) {
+  const a = previewAudio.value
+  if (!a?.duration) return
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+  const time = trimStart.value + pct * (trimEnd.value - trimStart.value)
+  a.currentTime = time; previewCurrentTime.value = time
+}
+
+function setTrimStart() {
+  const a = previewAudio.value
+  if (!a) return
+  trimStart.value = Math.min(a.currentTime, trimEnd.value - 0.5)
+  if (a.currentTime < trimStart.value) { a.currentTime = trimStart.value; previewCurrentTime.value = trimStart.value }
+}
+
+function setTrimEnd() {
+  const a = previewAudio.value
+  if (!a) return
+  trimEnd.value = Math.max(a.currentTime, trimStart.value + 0.5)
+}
+
+async function applyTrim() {
+  const a = previewAudio.value
+  if (!a || !mediaBase64.value) return
+  if (trimStart.value === 0 && trimEnd.value === previewDuration.value) return
+
+  try {
+    const resp = await fetch(mediaBase64.value)
+    const buf = await resp.arrayBuffer()
+    const audioCtx = new AudioContext()
+    const decoded = await audioCtx.decodeAudioData(buf)
+    const sr = decoded.sampleRate
+    const startSample = Math.floor(trimStart.value * sr)
+    const endSample = Math.floor(trimEnd.value * sr)
+    const len = endSample - startSample
+    const trimmed = audioCtx.createBuffer(decoded.numberOfChannels, len, sr)
+    for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+      trimmed.copyToChannel(decoded.getChannelData(ch).slice(startSample, endSample), ch)
+    }
+
+    // Re-encode using MediaRecorder to keep browser-native format
+    const dest = audioCtx.createMediaStreamDestination()
+    const source = audioCtx.createBufferSource()
+    source.buffer = trimmed
+    source.connect(dest)
+
+    const mimeType = getSupportedMimeType()
+    const recorder = new MediaRecorder(dest.stream, { mimeType: mimeType.mimeType })
+    const chunks: Blob[] = []
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+
+    await new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve()
+      recorder.start()
+      source.start()
+      source.onended = () => setTimeout(() => { recorder.stop(); audioCtx.close() }, 100)
+    })
+
+    const blob = new Blob(chunks, { type: mimeType.mimeType })
+    const reader = new FileReader()
+    reader.onload = () => {
+      mediaBase64.value = String(reader.result || '')
+      initPreviewAudio(mediaBase64.value)
+      toast.success('Áudio cortado!')
+    }
+    reader.readAsDataURL(blob)
+  } catch (err) {
+    console.error('Trim error:', err)
+    toast.error('Erro ao cortar áudio')
+  }
+}
+
+// Watch mediaBase64 to init preview audio when audio type
+watch([mediaBase64, () => messageType.value], ([b64, type]) => {
+  if (type === 'audio' && b64) initPreviewAudio(b64 as string)
+  else cleanupPreviewAudio()
+})
 
 const conversationId = computed(() => route.params.id as string)
 
@@ -363,6 +553,70 @@ function useImprovedMessage() {
 function closeImprovePanel() {
   showImprovePanel.value = false
   improvedMessage.value = ''
+}
+
+// TTS functions
+async function generateTtsPreview() {
+  if (!messageText.value.trim() || !conversation.value) return
+
+  isGeneratingTts.value = true
+  showTtsPreview.value = true
+  ttsAudioBase64.value = ''
+
+  try {
+    const ttsModel = whitelabelStore.features?.ttsModel || 'tts-1'
+    const ttsProvider = whitelabelStore.features?.ttsProvider || 'openai'
+    const elevenLabsVoiceId = whitelabelStore.features?.elevenLabsVoiceId || ''
+    const ttsResponse = await iaApi.textToSpeech(messageText.value, ttsVoice.value, ttsModel, ttsProvider, elevenLabsVoiceId)
+
+    if (!ttsResponse.data?.audioBase64) {
+      toast.error('Erro ao gerar audio')
+      showTtsPreview.value = false
+      return
+    }
+
+    ttsAudioBase64.value = ttsResponse.data.audioBase64
+  } catch (error: any) {
+    console.error('Erro ao gerar TTS:', error)
+    const errorMsg = error?.response?.data?.error || 'Erro ao gerar audio'
+    toast.error(errorMsg)
+    showTtsPreview.value = false
+  } finally {
+    isGeneratingTts.value = false
+  }
+}
+
+async function confirmSendTts() {
+  if (!ttsAudioBase64.value || !conversation.value) return
+
+  isSending.value = true
+  try {
+    const operatorNameForWhatsApp =
+      showOperatorNameInMessages.value && operatorDisplayName.value
+        ? operatorDisplayName.value
+        : undefined
+
+    await messagesApi.send({
+      to: conversation.value.identifier,
+      provider: conversation.value.provider,
+      type: 'audio',
+      mediaBase64: ttsAudioBase64.value,
+      filename: `tts_audio_${Date.now()}.mp3`,
+      operatorName: operatorNameForWhatsApp,
+    })
+
+    messageText.value = ''
+    closeTtsPreview()
+  } catch {
+    toast.error('Erro ao enviar audio')
+  } finally {
+    isSending.value = false
+  }
+}
+
+function closeTtsPreview() {
+  showTtsPreview.value = false
+  ttsAudioBase64.value = ''
 }
 
 // Reply functions
@@ -1449,12 +1703,68 @@ onUnmounted(() => {
 
             <!-- Audio Preview -->
             <div v-else-if="(message.type === 'audio' || message.type === 'ptt') && message.mediaUrl" class="mb-1.5">
-              <div class="flex items-center gap-2 p-2 bg-black/5 rounded-lg min-w-[180px]">
-                <div class="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
-                  <Mic class="w-4 h-4 text-white" />
+              <div class="flex items-center gap-2.5 min-w-[220px] max-w-[280px]">
+                <!-- Play/Pause -->
+                <button
+                  class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors"
+                  :class="message.direction === 'outgoing' ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-primary-500 hover:bg-primary-600 text-white'"
+                  @click="toggleAudio(message._id, message.mediaUrl!)"
+                >
+                  <Pause v-if="getAudioState(message._id).playing" class="w-4 h-4" />
+                  <Play v-else class="w-4 h-4 ml-0.5" />
+                </button>
+                <!-- Waveform + time -->
+                <div class="flex-1 min-w-0">
+                  <div
+                    class="relative h-8 cursor-pointer audio-waveform"
+                    @click="seekAudio(message._id, $event)"
+                  >
+                    <!-- Bars -->
+                    <div class="absolute inset-0 flex items-center gap-[2px]">
+                      <div
+                        v-for="i in 28"
+                        :key="i"
+                        class="flex-1 rounded-full transition-colors duration-150"
+                        :style="{ height: `${[40,65,30,80,55,90,45,70,35,85,50,75,60,95,40,68,52,88,42,72,58,82,38,78,48,92,56,62][i-1]}%` }"
+                        :class="[
+                          getAudioState(message._id).duration > 0 && (i / 28) <= (getAudioState(message._id).currentTime / getAudioState(message._id).duration)
+                            ? (message.direction === 'outgoing' ? 'bg-white' : 'bg-primary-500')
+                            : (message.direction === 'outgoing' ? 'bg-white/35' : 'bg-gray-300')
+                        ]"
+                      />
+                    </div>
+                  </div>
+                  <div class="flex justify-between mt-0.5">
+                    <span class="text-[10px] leading-none" :class="message.direction === 'outgoing' ? 'text-white/70' : 'text-gray-400'">
+                      {{ getAudioState(message._id).currentTime > 0 ? fmtTime(getAudioState(message._id).currentTime) : fmtTime(getAudioState(message._id).duration) }}
+                    </span>
+                  </div>
                 </div>
-                <audio :src="message.mediaUrl" controls class="flex-1 h-8 min-w-0 audio-player" />
+                <!-- Mic icon for PTT -->
+                <div v-if="message.type === 'ptt'" class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                  :class="message.direction === 'outgoing' ? 'bg-white/15' : 'bg-gray-100'">
+                  <Mic class="w-3 h-3" :class="message.direction === 'outgoing' ? 'text-white/70' : 'text-gray-400'" />
+                </div>
               </div>
+              <!-- Transcription -->
+              <div v-if="audioTranscriptions.get(message._id)" class="mt-1.5 text-xs leading-relaxed"
+                :class="message.direction === 'outgoing' ? 'text-white/80' : 'text-gray-600'">
+                {{ audioTranscriptions.get(message._id) }}
+              </div>
+              <!-- Transcribe button -->
+              <button
+                v-if="!audioTranscriptions.get(message._id)"
+                @click="transcribeAudio(message._id, message.mediaUrl!)"
+                :disabled="transcribingIds.has(message._id)"
+                class="mt-1 flex items-center gap-1 text-[10px] font-medium transition-colors"
+                :class="message.direction === 'outgoing'
+                  ? 'text-white/60 hover:text-white/90'
+                  : 'text-gray-400 hover:text-gray-600'"
+              >
+                <Loader2 v-if="transcribingIds.has(message._id)" class="w-3 h-3 animate-spin" />
+                <FileText v-else class="w-3 h-3" />
+                {{ transcribingIds.has(message._id) ? 'Transcrevendo...' : 'Transcrever' }}
+              </button>
             </div>
 
             <!-- Document Preview -->
@@ -1691,8 +2001,80 @@ onUnmounted(() => {
         <!-- Media upload (compact) -->
         <div v-if="messageType !== 'text'" class="mb-2">
           <div class="p-2 bg-gray-50 rounded-xl border border-gray-200">
-            <!-- Preview -->
-            <div v-if="mediaBase64 || mediaUrl" class="flex items-center gap-2 p-2 bg-white rounded-lg">
+            <!-- Audio Preview Player -->
+            <div v-if="(messageType === 'audio') && (mediaBase64 || mediaUrl)" class="p-3 bg-white rounded-lg space-y-2.5">
+              <!-- Player row -->
+              <div class="flex items-center gap-2.5">
+                <button
+                  class="w-10 h-10 rounded-full bg-primary-500 hover:bg-primary-600 text-white flex items-center justify-center flex-shrink-0 transition-colors"
+                  @click="togglePreviewAudio"
+                >
+                  <Pause v-if="previewPlaying" class="w-5 h-5" />
+                  <Play v-else class="w-5 h-5 ml-0.5" />
+                </button>
+                <div class="flex-1 min-w-0">
+                  <!-- Waveform -->
+                  <div class="relative h-9 cursor-pointer audio-waveform" @click="seekPreviewAudio($event)">
+                    <div class="absolute inset-0 flex items-center gap-[2px]">
+                      <div
+                        v-for="i in 35"
+                        :key="i"
+                        class="flex-1 rounded-full transition-colors duration-100"
+                        :style="{ height: `${[45,70,35,85,55,92,40,75,30,88,50,78,62,95,42,72,54,90,38,68,58,82,36,80,48,94,52,66,44,76,60,86,46,74,56][i-1]}%` }"
+                        :class="[
+                          previewDuration > 0 && ((i / 35) * (trimEnd - trimStart) + trimStart) <= previewCurrentTime
+                            ? 'bg-primary-500'
+                            : 'bg-gray-200',
+                          previewDuration > 0 && (
+                            ((i / 35) * previewDuration) < trimStart || ((i / 35) * previewDuration) > trimEnd
+                          ) ? 'opacity-30' : ''
+                        ]"
+                      />
+                    </div>
+                  </div>
+                  <!-- Time -->
+                  <div class="flex justify-between mt-1">
+                    <span class="text-[10px] text-gray-400">{{ previewCurrentTime > 0 ? fmtTime(previewCurrentTime) : '0:00' }}</span>
+                    <span class="text-[10px] text-gray-400">{{ fmtTime(trimEnd - trimStart) }}</span>
+                  </div>
+                </div>
+                <button
+                  @click="mediaUrl = ''; mediaBase64 = ''; mediaFilename = ''; cleanupPreviewAudio()"
+                  class="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 flex-shrink-0"
+                >
+                  <X class="w-4 h-4" />
+                </button>
+              </div>
+              <!-- Trim controls -->
+              <div v-if="previewDuration > 1" class="flex items-center gap-1.5">
+                <button
+                  @click="setTrimStart"
+                  class="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded-md transition-colors"
+                  :class="trimStart > 0 ? 'bg-primary-50 text-primary-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+                  title="Marcar início do corte na posição atual"
+                >
+                  Início {{ trimStart > 0 ? fmtTime(trimStart) : '' }}
+                </button>
+                <button
+                  @click="setTrimEnd"
+                  class="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded-md transition-colors"
+                  :class="trimEnd < previewDuration ? 'bg-primary-50 text-primary-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
+                  title="Marcar fim do corte na posição atual"
+                >
+                  Fim {{ trimEnd < previewDuration ? fmtTime(trimEnd) : '' }}
+                </button>
+                <button
+                  v-if="trimStart > 0 || trimEnd < previewDuration"
+                  @click="applyTrim"
+                  class="flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-md hover:bg-primary-600 transition-colors"
+                >
+                  Cortar
+                </button>
+              </div>
+            </div>
+
+            <!-- Image/Video/Document Preview (non-audio) -->
+            <div v-else-if="(mediaBase64 || mediaUrl) && messageType !== 'audio'" class="flex items-center gap-2 p-2 bg-white rounded-lg">
               <img
                 v-if="messageType === 'image' && (mediaBase64 || mediaUrl)"
                 :src="mediaBase64 || mediaUrl"
@@ -1801,6 +2183,58 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- TTS Preview Panel -->
+        <div v-if="showTtsPreview" class="bg-white border border-gray-200 rounded-xl shadow-lg mb-2 p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-gray-600">Preview do audio gerado</span>
+            <button @click="closeTtsPreview" class="text-gray-400 hover:text-gray-600">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+          <!-- Loading -->
+          <div v-if="isGeneratingTts" class="flex items-center justify-center py-4">
+            <Loader2 class="w-5 h-5 animate-spin text-primary-500" />
+            <span class="ml-2 text-sm text-gray-500">Gerando audio...</span>
+          </div>
+          <!-- Audio player -->
+          <div v-else-if="ttsAudioBase64">
+            <audio :src="ttsAudioBase64" controls class="w-full h-10" />
+            <!-- Voice selector (OpenAI only) -->
+            <div v-if="(whitelabelStore.features?.ttsProvider || 'openai') === 'openai'" class="flex items-center gap-2 mt-2">
+              <label class="text-xs text-gray-500">Voz:</label>
+              <select v-model="ttsVoice" class="text-xs border border-gray-200 rounded-lg px-2 py-1">
+                <option v-for="opt in ttsVoiceOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
+          </div>
+          <!-- Actions -->
+          <div v-if="!isGeneratingTts && ttsAudioBase64" class="flex gap-2">
+            <button
+              @click="generateTtsPreview"
+              :disabled="isGeneratingTts"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 active:scale-[0.97] transition-all disabled:opacity-50"
+            >
+              <RefreshCw class="w-3 h-3" />
+              Regerar
+            </button>
+            <button
+              @click="confirmSendTts"
+              :disabled="isSending"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs font-medium hover:bg-primary-700 active:scale-[0.97] transition-all disabled:opacity-50"
+            >
+              <Send class="w-3 h-3" />
+              Enviar
+            </button>
+            <button
+              @click="closeTtsPreview"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 active:scale-[0.97] transition-all"
+            >
+              <X class="w-3 h-3" />
+              Descartar
+            </button>
+          </div>
+        </div>
+
         <!-- Canned Responses Popup -->
         <div v-if="showCannedResponses && cannedResponsesEnabled" class="bg-white border border-gray-200 rounded-xl shadow-lg mb-2 max-h-64 overflow-hidden flex flex-col">
           <div class="p-2 border-b border-gray-100">
@@ -1889,6 +2323,17 @@ onUnmounted(() => {
               <Wand2 v-else class="w-4 h-4" />
             </button>
           </div>
+          <!-- TTS Button -->
+          <button
+            v-if="messageType === 'audio' && messageText.trim().length > 0 && !isNoteMode"
+            @click="generateTtsPreview"
+            :disabled="isGeneratingTts || isSending"
+            class="w-12 h-12 flex items-center justify-center rounded-xl border border-primary-200 text-primary-600 hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all flex-shrink-0"
+            title="Gerar audio com IA"
+          >
+            <Loader2 v-if="isGeneratingTts" class="w-5 h-5 animate-spin" />
+            <Volume2 v-else class="w-5 h-5" />
+          </button>
           <button
             @click="sendMessage"
             :disabled="isSending || (!isNoteMode && messageType === 'text' && !messageText.trim()) || (isNoteMode && !messageText.trim())"
@@ -2113,13 +2558,9 @@ onUnmounted(() => {
   @apply bg-amber-100/60;
 }
 
-/* Audio player compacto */
-.audio-player {
-  max-width: 140px;
-}
-
-.audio-player::-webkit-media-controls-panel {
-  @apply bg-transparent;
+/* Custom audio waveform player */
+.audio-waveform {
+  touch-action: none;
 }
 
 /* Type buttons - touch friendly */

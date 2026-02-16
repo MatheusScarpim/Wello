@@ -22,6 +22,7 @@ export const useBotBuilderStore = defineStore('botBuilder', () => {
   const isSaving = ref(false)
   const isLoading = ref(false)
   const showTestPanel = ref(false)
+  const fitViewTrigger = ref(0)
 
   // Viewport
   const viewport = ref<{ x: number; y: number; zoom: number }>({
@@ -167,6 +168,29 @@ export const useBotBuilderStore = defineStore('botBuilder', () => {
     }
   }
 
+  function loadGeneratedBot(generatedNodes: any[], generatedEdges: any[]) {
+    nodes.value = generatedNodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      position: n.position,
+      data: { ...n.data, label: n.data?.label || n.label },
+      label: n.data?.label || n.label,
+    }))
+
+    edges.value = generatedEdges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle || undefined,
+      label: e.label,
+      animated: e.animated ?? true,
+    }))
+
+    selectedNodeId.value = null
+    isDirty.value = true
+    fitViewTrigger.value++
+  }
+
   function reset() {
     definitionId.value = null
     botId.value = ''
@@ -198,6 +222,7 @@ export const useBotBuilderStore = defineStore('botBuilder', () => {
     isSaving,
     isLoading,
     showTestPanel,
+    fitViewTrigger,
     viewport,
 
     // Actions
@@ -210,6 +235,7 @@ export const useBotBuilderStore = defineStore('botBuilder', () => {
     publish,
     unpublish,
     loadDefinition,
+    loadGeneratedBot,
     reset,
   }
 })

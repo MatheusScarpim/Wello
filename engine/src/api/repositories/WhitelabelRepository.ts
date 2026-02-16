@@ -41,6 +41,10 @@ export interface FeatureFlags {
   maxDepartments: number
   maxOperators: number
   showOperatorNameInMessages: boolean
+  defaultTtsVoice: string
+  ttsModel: string
+  ttsProvider: string
+  elevenLabsVoiceId: string
 }
 
 export interface AutomaticMessageConfig {
@@ -96,6 +100,10 @@ export const defaultFeatures: FeatureFlags = {
   maxDepartments: 10,
   maxOperators: 50,
   showOperatorNameInMessages: false,
+  defaultTtsVoice: 'nova',
+  ttsModel: 'tts-1',
+  ttsProvider: 'openai',
+  elevenLabsVoiceId: '',
 }
 
 export const defaultAutomaticMessages: AutomaticMessages = {
@@ -117,7 +125,7 @@ export const defaultWhitelabelSettings: Omit<
   IWhitelabelSettings,
   '_id' | 'createdAt' | 'updatedAt'
 > = {
-  companyName: 'welloChat',
+  companyName: 'ScarlatChat',
   protocolIdentifier: '',
   theme: defaultTheme,
   metadata: {},

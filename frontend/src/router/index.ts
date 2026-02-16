@@ -202,7 +202,7 @@ router.beforeEach((to, _from, next) => {
     return next((to.query.redirect as string) || '/dashboard')
   }
 
-  document.title = `${to.meta.title || 'welloChat'} - Painel de Atendimento`
+  document.title = `${to.meta.title || 'ScarlatChat'} - Painel de Atendimento`
   next()
 })
 

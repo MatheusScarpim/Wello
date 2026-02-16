@@ -1,5 +1,5 @@
 {
-  "name": "wellochat",
+  "name": "scarlatchat",
   "version": "2.0.0",
   "description": "Sistema de Automação WhatsApp Multi-Provider com Bots Inteligentes",
   "main": "./src/new_server.ts",

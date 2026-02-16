@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, markRaw, onMounted, onUnmounted } from 'vue'
+import { ref, watch, markRaw, onMounted, onUnmounted, nextTick } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -19,6 +19,7 @@ import HttpRequestNode from './nodes/HttpRequestNode.vue'
 import DelayNode from './nodes/DelayNode.vue'
 import AiResponseNode from './nodes/AiResponseNode.vue'
 import EndNode from './nodes/EndNode.vue'
+import BotBuilderAiAssistant from './BotBuilderAiAssistant.vue'
 
 const store = useBotBuilderStore()
 
@@ -36,7 +37,7 @@ const nodeTypes = {
   end: markRaw(EndNode),
 }
 
-const { project, getSelectedEdges } = useVueFlow()
+const { project, getSelectedEdges, fitView } = useVueFlow()
 
 // Undo history
 type Snapshot = { nodes: string; edges: string }
@@ -172,6 +173,12 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+watch(() => store.fitViewTrigger, () => {
+  nextTick(() => {
+    fitView({ padding: 0.2, duration: 300 })
+  })
+})
+
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
 })
@@ -182,7 +189,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex-1 h-full" @drop="onDrop" @dragover="onDragOver">
+  <div class="flex-1 h-full relative" @drop="onDrop" @dragover="onDragOver">
     <VueFlow
       v-model:nodes="store.nodes"
       v-model:edges="store.edges"
@@ -203,6 +210,7 @@ onUnmounted(() => {
       <Controls />
       <MiniMap />
     </VueFlow>
+    <BotBuilderAiAssistant />
   </div>
 </template>
 

@@ -123,7 +123,7 @@ onMounted(() => {
     <!-- Header -->
     <div>
       <h1 class="text-2xl font-bold text-gray-900">Configurações</h1>
-      <p class="text-gray-500">Configurações do sistema welloChat</p>
+      <p class="text-gray-500">Configurações do sistema ScarlatChat</p>
     </div>
 
     <!-- WhatsApp Section -->

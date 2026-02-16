@@ -263,7 +263,7 @@ const sidebarClasses = computed(() => {
       class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200"
     >
       <p class="text-xs text-gray-400 text-center">
-        welloChat v1.0.0
+        ScarlatChat v1.0.0
       </p>
     </div>
   </aside>

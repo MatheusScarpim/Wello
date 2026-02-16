@@ -4,10 +4,10 @@ const host = process.env.HTTP_HOST || 'localhost'
 const swaggerDocument = {
   openapi: '3.0.3',
   info: {
-    title: 'welloChat API',
+    title: 'ScarlatChat API',
     version: '2.0.0',
     description:
-      'Documentacao dos endpoints HTTP utilizados pelo welloChat (bots, mensagens, webhooks, storage e despesas).',
+      'Documentacao dos endpoints HTTP utilizados pelo ScarlatChat (bots, mensagens, webhooks, storage e despesas).',
   },
   servers: [
     {
@@ -388,7 +388,7 @@ const swaggerDocument = {
                   properties: {
                     status: { type: 'string', example: 'operational' },
                     version: { type: 'string', example: '2.0.0' },
-                    service: { type: 'string', example: 'welloChat API' },
+                    service: { type: 'string', example: 'ScarlatChat API' },
                   },
                 },
               },

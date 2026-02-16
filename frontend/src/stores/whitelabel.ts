@@ -33,7 +33,11 @@ const defaultSettings: WhitelabelSettings = {
     enableNotes: true,
     maxDepartments: 10,
     maxOperators: 50,
-    showOperatorNameInMessages: false
+    showOperatorNameInMessages: false,
+    defaultTtsVoice: 'nova',
+    ttsModel: 'tts-1',
+    ttsProvider: 'openai',
+    elevenLabsVoiceId: ''
   },
   automaticMessages: {
     welcome: {

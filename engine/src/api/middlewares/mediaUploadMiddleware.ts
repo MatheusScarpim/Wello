@@ -71,8 +71,8 @@ async function convertAudioBase64ToMp4(
 
   const tempId = randomBytes(6).toString('hex')
   // Usa extensão genérica .bin para ffmpeg auto-detectar o formato
-  const inputPath = path.join(os.tmpdir(), `wello-input-${tempId}.bin`)
-  const outputPath = path.join(os.tmpdir(), `wello-output-${tempId}.mp4`)
+  const inputPath = path.join(os.tmpdir(), `scarlat-input-${tempId}.bin`)
+  const outputPath = path.join(os.tmpdir(), `scarlat-output-${tempId}.mp4`)
 
   try {
     // Remove prefixo data:xxx;base64, se existir (inclui possíveis parâmetros como codecs)

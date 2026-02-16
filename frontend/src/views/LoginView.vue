@@ -19,7 +19,7 @@ const showPassword = ref(false)
 const isSubmitting = ref(false)
 
 const loginBackground = computed(() => whitelabelStore.loginBackground)
-const companyName = computed(() => whitelabelStore.companyName || 'Wello')
+const companyName = computed(() => whitelabelStore.companyName || 'ScarlatChat')
 
 onMounted(async () => {
   await whitelabelStore.fetchSettings()

@@ -121,7 +121,7 @@ export class WebhookManager {
         timeout: config.timeout || 10000,
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'welloChat-Webhook/2.0',
+          'User-Agent': 'ScarlatChat-Webhook/2.0',
         },
       })
 

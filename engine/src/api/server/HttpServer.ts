@@ -80,7 +80,7 @@ export class HttpServer {
       res.status(200).json({
         status: 'operational',
         version: '2.0.0',
-        service: 'welloChat API',
+        service: 'ScarlatChat API',
       })
     })
   }

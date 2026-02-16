@@ -451,6 +451,23 @@ export const iaApi = {
     apiClient.post<{ suggestion: string; confidence: number }>('/api/ia/suggestion', { conversationId, lastMessages }),
   improveMessage: (conversationId: string, message: string) =>
     apiClient.post<{ improved: string }>('/api/ia/improve-message', { conversationId, message }),
+  textToSpeech: (text: string, voice?: string, model?: string, provider?: string, elevenLabsVoiceId?: string) =>
+    apiClient.post<{ audioBase64: string; contentType: string }>('/api/ia/text-to-speech', { text, voice, model, provider, elevenLabsVoiceId }),
+  speechToText: (audioBlob: Blob, filename: string) => {
+    const formData = new FormData()
+    formData.append('audio', audioBlob, filename)
+    return apiClient.upload<{ text: string }>('/api/ia/speech-to-text', formData)
+  },
+  cloneVoice: (audio: File, name: string) => {
+    const formData = new FormData()
+    formData.append('audio', audio)
+    formData.append('name', name)
+    return apiClient.upload<{ voiceId: string }>('/api/ia/clone-voice', formData)
+  },
+  listElevenLabsVoices: () =>
+    apiClient.get<{ voices: Array<{ voiceId: string; name: string; category: string; previewUrl?: string }> }>('/api/ia/elevenlabs-voices'),
+  generateBot: (prompt: string) =>
+    apiClient.post<{ nodes: any[]; edges: any[] }>('/api/ia/generate-bot', { prompt }, { timeout: 60000 }),
 }
 
 export const visualBotsApi = {

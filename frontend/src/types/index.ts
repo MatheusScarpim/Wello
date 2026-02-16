@@ -615,6 +615,10 @@ export interface FeatureFlags {
   maxDepartments: number
   maxOperators: number
   showOperatorNameInMessages: boolean
+  defaultTtsVoice: string
+  ttsModel: string
+  ttsProvider: string
+  elevenLabsVoiceId: string
 }
 
 export interface AutomaticMessageConfig {
