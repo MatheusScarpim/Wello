@@ -9,8 +9,8 @@ services:
     ports:
       - "27021:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: 334455Matheus@
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Defina MONGO_PASSWORD no .env}
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -45,7 +45,7 @@ services:
     container_name: wello-frontend
     restart: unless-stopped
     ports:
-      - "4176:4176"
+      - "4176:80"
     depends_on:
       - engine
     networks:
