@@ -229,6 +229,67 @@ export class MessageService {
   }
 
   /**
+   * Salva uma nota interna (visível apenas para operadores, nunca enviada ao cliente)
+   */
+  async saveNote(params: {
+    conversationId: string
+    message: string
+    operatorId?: string
+    operatorName?: string
+  }) {
+    const now = new Date()
+
+    const conversation = await conversationRepository.findById(
+      params.conversationId,
+    )
+    const operatorId = params.operatorId || conversation?.operatorId || null
+    const operatorName =
+      params.operatorName || conversation?.operatorName || null
+
+    const note = await this.repository.create({
+      conversationId: params.conversationId,
+      message: params.message,
+      type: 'note',
+      direction: 'outgoing',
+      status: 'sent',
+      isRead: true,
+      isNote: true,
+      createdAt: now,
+      updatedAt: now,
+      operatorId,
+      operatorName,
+    } as any)
+
+    // Emite via Socket.IO para que outros operadores vejam a nota em tempo real
+    setImmediate(() => {
+      try {
+        SocketServer.emitMessage(
+          {
+            messageId: note._id?.toString(),
+            conversationId: params.conversationId,
+            content: params.message,
+            type: 'note',
+            direction: 'outgoing',
+            status: 'sent',
+            isNote: true,
+            createdAt: note.createdAt,
+            operatorId,
+            operatorName,
+          },
+          params.conversationId,
+          operatorId,
+        )
+      } catch {
+        // ignore socket errors
+      }
+    })
+
+    // Notas internas NÃO disparam webhooks e NÃO atualizam contato
+
+    return note
+  }
+
+  /**
    * Dispara webhooks para eventos de mensagem
    */
   private async dispatchMessageWebhooks(

@@ -73,6 +73,8 @@ export interface StageResponse {
   updateSessionData?: Record<string, any>
   endSession?: boolean
   skipMessage?: boolean
+  transferToHuman?: boolean
+  transferDepartmentId?: string
 }
 
 /**

@@ -412,6 +412,38 @@ export class MessageController extends BaseController {
   }
 
   /**
+   * Cria uma nota interna na conversa (visível apenas para a equipe)
+   * POST /api/messages/note
+   */
+  public sendNote = this.asyncHandler(
+    async (req: Request, res: Response) => {
+      const { conversationId, message } = req.body
+
+      if (!conversationId || !message?.trim()) {
+        return this.sendError(
+          res,
+          'conversationId e message são obrigatórios',
+          400,
+        )
+      }
+
+      try {
+        const note = await this.messageService.saveNote({
+          conversationId,
+          message: message.trim(),
+          operatorId: req.user?.userId,
+          operatorName: req.user?.email?.split('@')[0] || undefined,
+        })
+
+        this.sendSuccess(res, note, 'Nota interna criada com sucesso')
+      } catch (error: any) {
+        console.error('❌ Erro ao criar nota interna:', error)
+        this.sendError(res, 'Erro ao criar nota interna', 500, error.message)
+      }
+    },
+  )
+
+  /**
    * Marca mensagem como lida
    * PATCH /api/messages/:id/read
    */

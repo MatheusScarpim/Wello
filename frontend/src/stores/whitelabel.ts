@@ -18,7 +18,7 @@ const defaultTheme: ThemeSettings = {
 
 const defaultSettings: WhitelabelSettings = {
   _id: '',
-  companyName: 'welloChat',
+  companyName: 'ScarlatChat',
   protocolIdentifier: '',
   theme: defaultTheme,
   metadata: {},
@@ -134,6 +134,9 @@ export const useWhitelabelStore = defineStore('whitelabel', () => {
     }
     root.style.setProperty('--border-radius', radiusMap[theme.borderRadius])
 
+    // Update page title with company name
+    document.title = `${settings.value.companyName} - Painel de Atendimento`
+
     // Update PWA theme-color
     const metaTheme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
     if (metaTheme) {
@@ -153,6 +156,9 @@ export const useWhitelabelStore = defineStore('whitelabel', () => {
 
     // Apply favicon if present
     applyFavicon(settings.value.favicon)
+
+    // Update PWA manifest with custom icon
+    applyManifest(settings.value)
   }
 
   function applyFavicon(faviconUrl?: string) {
@@ -165,6 +171,50 @@ export const useWhitelabelStore = defineStore('whitelabel', () => {
       document.head.appendChild(linkEl)
     }
     linkEl.href = faviconUrl
+
+    let appleEl = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]')
+    if (!appleEl) {
+      appleEl = document.createElement('link')
+      appleEl.rel = 'apple-touch-icon'
+      document.head.appendChild(appleEl)
+    }
+    appleEl.href = faviconUrl
+  }
+
+  function applyManifest(s: WhitelabelSettings) {
+    const iconSrc = s.logo || s.logoSmall || '/logo_192x192.png'
+    const manifest = {
+      name: `${s.companyName} - Painel de Atendimento`,
+      short_name: s.companyName,
+      description: `Painel de atendimento ${s.companyName}`,
+      theme_color: s.theme.primaryColor,
+      background_color: '#ffffff',
+      display: 'standalone',
+      start_url: '/',
+      icons: [
+        {
+          src: iconSrc,
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any maskable'
+        }
+      ]
+    }
+
+    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+
+    let manifestEl = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
+    if (!manifestEl) {
+      manifestEl = document.createElement('link')
+      manifestEl.rel = 'manifest'
+      document.head.appendChild(manifestEl)
+    }
+    // Revoke old blob URL to avoid memory leak
+    if (manifestEl.href.startsWith('blob:')) {
+      URL.revokeObjectURL(manifestEl.href)
+    }
+    manifestEl.href = url
   }
 
   function isFeatureEnabled(feature: keyof WhitelabelSettings['features']): boolean {

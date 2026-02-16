@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { conversationsApi, messagesApi, botsApi, finalizationsApi, queueApi, iaApi, tagsApi } from '@/api'
+import { conversationsApi, messagesApi, botsApi, finalizationsApi, queueApi, iaApi, tagsApi, cannedResponsesApi } from '@/api'
 import { useWhitelabelStore } from '@/stores/whitelabel'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -34,14 +34,16 @@ import {
   ArrowRightLeft,
   Sticker,
   Pause,
-  Wand2
+  Wand2,
+  Zap,
+  StickyNote
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import AuraResponseCard from '@/components/aura/AuraResponseCard.vue'
 import TransferModal from '@/components/modals/TransferModal.vue'
 import { useToast } from 'vue-toastification'
 import { format } from 'date-fns'
-import type { Conversation, Message, MessageType, BotSession, Finalization, Tag as TagType } from '@/types'
+import type { Conversation, Message, MessageType, BotSession, Finalization, Tag as TagType, CannedResponse } from '@/types'
 import type { AuraWebhookResponse } from '@/types/aura'
 import { getSocket } from '@/services/socket'
 
@@ -115,12 +117,70 @@ const availableTags = ref<TagType[]>([])
 const conversationTags = ref<string[]>([])
 const showTagsDropdown = ref(false)
 
+// Internal Notes
+const isNoteMode = ref(false)
+const notesEnabled = computed(
+  () => whitelabelStore.isFeatureEnabled('enableNotes'),
+)
+
+// Canned Responses
+const showCannedResponses = ref(false)
+const cannedResponses = ref<CannedResponse[]>([])
+const cannedSearchQuery = ref('')
+const cannedResponsesEnabled = computed(
+  () => whitelabelStore.isFeatureEnabled('enableCannedResponses'),
+)
+const filteredCannedResponses = computed(() => {
+  if (!cannedSearchQuery.value) return cannedResponses.value
+  const term = cannedSearchQuery.value.toLowerCase()
+  return cannedResponses.value.filter(
+    (r) =>
+      r.title.toLowerCase().includes(term) ||
+      r.shortcut.toLowerCase().includes(term) ||
+      r.content.toLowerCase().includes(term),
+  )
+})
+
+async function fetchCannedResponses() {
+  try {
+    const response = await cannedResponsesApi.list()
+    if (response.data) cannedResponses.value = response.data
+  } catch {
+    // silent fail
+  }
+}
+
+function selectCannedResponse(item: CannedResponse) {
+  messageText.value = item.content
+  showCannedResponses.value = false
+  cannedSearchQuery.value = ''
+  slashTriggered.value = false
+}
+
 // Message form
 const messageType = ref<MessageType>('text')
 const messageText = ref('')
 const mediaUrl = ref('')
 const mediaBase64 = ref('')
 const mediaFilename = ref('')
+
+// Slash command detection for canned responses
+const slashTriggered = ref(false)
+
+watch(messageText, (val) => {
+  if (!cannedResponsesEnabled.value || cannedResponses.value.length === 0 || isNoteMode.value) return
+
+  if (val.startsWith('/')) {
+    const query = val.slice(1)
+    cannedSearchQuery.value = query
+    showCannedResponses.value = true
+    slashTriggered.value = true
+  } else if (slashTriggered.value) {
+    showCannedResponses.value = false
+    cannedSearchQuery.value = ''
+    slashTriggered.value = false
+  }
+})
 
 // Audio recording
 const isRecording = ref(false)
@@ -225,7 +285,8 @@ async function loadAll() {
     fetchConversation(),
     fetchMessages(),
     fetchBotSession(),
-    fetchTags()
+    fetchTags(),
+    fetchCannedResponses()
   ])
   isLoading.value = false
 }
@@ -378,8 +439,28 @@ function getMessageSwipeStyle(message: Message) {
   }
 }
 
+async function sendNote() {
+  if (!conversation.value || !messageText.value.trim()) return
+
+  isSending.value = true
+  try {
+    await messagesApi.sendNote(conversationId.value, messageText.value)
+    messageText.value = ''
+  } catch {
+    toast.error('Erro ao enviar nota interna')
+  } finally {
+    isSending.value = false
+  }
+}
+
 async function sendMessage() {
   if (!conversation.value) return
+
+  // Se estiver em modo nota, envia como nota interna
+  if (isNoteMode.value) {
+    return sendNote()
+  }
+
   if (messageType.value === 'text' && !messageText.value.trim()) return
   if (messageType.value !== 'text' && !mediaUrl.value && !mediaBase64.value) {
     toast.error('Informe uma URL ou selecione um arquivo')
@@ -928,6 +1009,7 @@ const handleSocketMessage = async (event: Event) => {
         status: detail.status || 'sent',
         createdAt: detail.createdAt,
         mediaUrl: detail.mediaUrl,
+        isNote: detail.isNote || false,
       }
 
       let messageToAdd = fallbackMessage
@@ -1254,11 +1336,37 @@ onUnmounted(() => {
           v-for="message in messages"
           :key="message._id"
           class="flex group"
-          :class="message.direction === 'outgoing' ? 'justify-end' : 'justify-start'"
+          :class="[
+            message.type === 'note' || message.isNote
+              ? 'justify-center'
+              : message.direction === 'outgoing'
+                ? 'justify-end'
+                : 'justify-start'
+          ]"
         >
-          <!-- Reply button (incoming) -->
+          <!-- Internal Note bubble -->
+          <div
+            v-if="message.type === 'note' || message.isNote"
+            class="message-note max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl"
+          >
+            <div class="flex items-center gap-1.5 mb-1">
+              <StickyNote class="w-3 h-3 text-amber-600" />
+              <span class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                Nota interna
+              </span>
+              <span v-if="message.operatorName" class="text-[10px] text-amber-600">
+                · {{ message.operatorName }}
+              </span>
+            </div>
+            <p class="text-sm whitespace-pre-wrap break-words leading-relaxed text-amber-900">{{ message.message }}</p>
+            <p class="text-[10px] mt-1 text-amber-500 text-right">
+              {{ formatTime(message.createdAt) }}
+            </p>
+          </div>
+
+          <!-- Reply button (incoming) - only for non-note messages -->
           <button
-            v-if="message.direction === 'incoming'"
+            v-else-if="message.direction === 'incoming'"
             @click="startReply(message)"
             class="self-center mr-1 p-1.5 rounded-full bg-gray-100 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200"
             title="Responder"
@@ -1267,6 +1375,7 @@ onUnmounted(() => {
           </button>
 
           <div
+            v-if="message.type !== 'note' && !message.isNote"
             class="message-bubble"
             :class="message.direction === 'outgoing' ? 'message-outgoing' : 'message-incoming'"
             :style="getMessageSwipeStyle(message)"
@@ -1414,7 +1523,7 @@ onUnmounted(() => {
 
           <!-- Reply button (outgoing) -->
           <button
-            v-if="message.direction === 'outgoing'"
+            v-if="message.direction === 'outgoing' && message.type !== 'note' && !message.isNote"
             @click="startReply(message)"
             class="self-center ml-1 p-1.5 rounded-full bg-gray-100 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200"
             title="Responder"
@@ -1692,15 +1801,80 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- Canned Responses Popup -->
+        <div v-if="showCannedResponses && cannedResponsesEnabled" class="bg-white border border-gray-200 rounded-xl shadow-lg mb-2 max-h-64 overflow-hidden flex flex-col">
+          <div class="p-2 border-b border-gray-100">
+            <input
+              v-model="cannedSearchQuery"
+              type="text"
+              class="input w-full text-sm py-1.5"
+              placeholder="Buscar resposta rapida..."
+              @keydown.escape="showCannedResponses = false"
+            />
+          </div>
+          <div class="overflow-y-auto flex-1">
+            <button
+              v-for="item in filteredCannedResponses"
+              :key="item._id"
+              @click="selectCannedResponse(item)"
+              class="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
+            >
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded">{{ item.shortcut }}</span>
+                <span class="text-sm font-medium text-gray-900 truncate">{{ item.title }}</span>
+              </div>
+              <p class="text-xs text-gray-400 truncate mt-0.5">{{ item.content }}</p>
+            </button>
+            <div v-if="filteredCannedResponses.length === 0" class="p-3 text-center text-sm text-gray-400">
+              Nenhuma resposta encontrada
+            </div>
+          </div>
+        </div>
+
+        <!-- Note mode banner -->
+        <div
+          v-if="isNoteMode"
+          class="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl mb-2"
+        >
+          <StickyNote class="w-4 h-4 text-amber-600 flex-shrink-0" />
+          <span class="text-xs font-medium text-amber-700 flex-1">Modo nota interna — esta mensagem nao sera enviada ao cliente</span>
+          <button @click="isNoteMode = false" class="p-1 text-amber-500 hover:text-amber-700">
+            <X class="w-3.5 h-3.5" />
+          </button>
+        </div>
+
         <!-- Message input -->
         <div class="flex gap-2 items-end">
+          <!-- Note toggle button -->
+          <button
+            v-if="notesEnabled"
+            @click="isNoteMode = !isNoteMode"
+            class="w-12 h-12 flex items-center justify-center rounded-xl border transition-all flex-shrink-0 active:scale-95"
+            :class="isNoteMode
+              ? 'bg-amber-50 text-amber-600 border-amber-300 ring-2 ring-amber-200'
+              : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-amber-500'"
+            title="Nota interna"
+          >
+            <StickyNote class="w-5 h-5" />
+          </button>
+          <!-- Canned responses button -->
+          <button
+            v-if="cannedResponsesEnabled && cannedResponses.length > 0 && !isNoteMode"
+            @click="showCannedResponses = !showCannedResponses"
+            class="w-12 h-12 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-primary-600 active:scale-95 transition-all flex-shrink-0"
+            :class="showCannedResponses ? 'bg-primary-50 text-primary-600 border-primary-200' : ''"
+            title="Respostas Rapidas"
+          >
+            <Zap class="w-5 h-5" />
+          </button>
           <div class="flex-1 relative">
             <input
               v-model="messageText"
               @keyup.enter="sendMessage"
               type="text"
-              :placeholder="messageType === 'text' ? 'Mensagem...' : 'Legenda...'"
+              :placeholder="isNoteMode ? 'Escreva uma nota interna...' : messageType === 'text' ? 'Mensagem...' : 'Legenda...'"
               class="input w-full py-3 text-base sm:text-sm pr-12 rounded-xl"
+              :class="isNoteMode ? 'bg-amber-50 border-amber-300 focus:border-amber-400 placeholder:text-amber-400' : ''"
               :disabled="isSending || isImprovingMessage"
             />
             <!-- Melhorar mensagem -->
@@ -1717,11 +1891,13 @@ onUnmounted(() => {
           </div>
           <button
             @click="sendMessage"
-            :disabled="isSending || (messageType === 'text' && !messageText.trim())"
-            class="w-12 h-12 flex items-center justify-center rounded-xl bg-primary-500 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-600 active:scale-95 transition-all shadow-sm"
+            :disabled="isSending || (!isNoteMode && messageType === 'text' && !messageText.trim()) || (isNoteMode && !messageText.trim())"
+            class="w-12 h-12 flex items-center justify-center rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all shadow-sm"
+            :class="isNoteMode ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary-500 hover:bg-primary-600'"
           >
-            <Send v-if="!isSending" class="w-5 h-5" />
-            <LoadingSpinner v-else size="sm" />
+            <LoadingSpinner v-if="isSending" size="sm" />
+            <StickyNote v-else-if="isNoteMode" class="w-5 h-5" />
+            <Send v-else class="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -1926,6 +2102,15 @@ onUnmounted(() => {
 .message-incoming {
   @apply bg-white text-gray-900 border border-gray-100;
   border-bottom-left-radius: 6px;
+}
+
+/* Internal note bubble */
+.message-note {
+  @apply bg-amber-50 border-2 border-dashed border-amber-300 shadow-sm;
+}
+
+.message-note:hover {
+  @apply bg-amber-100/60;
 }
 
 /* Audio player compacto */

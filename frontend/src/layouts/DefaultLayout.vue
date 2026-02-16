@@ -53,7 +53,12 @@ const handleSystemNotification = (event: Event) => {
 }
 
 // Hide header on mobile for conversation detail (has its own header)
+const isBotBuilder = computed(() =>
+  route.name === 'bot-builder-new' || route.name === 'bot-builder-edit'
+)
+
 const showHeader = computed(() => {
+  if (isBotBuilder.value) return false
   if (uiStore.isMobile && route.name === 'conversation-detail') {
     return false
   }
@@ -90,7 +95,7 @@ onUnmounted(() => {
       }"
     >
       <TheHeader v-if="showHeader" />
-      <main class="flex-1 overflow-y-auto" :class="!showHeader || route.name === 'conversation-detail' ? '' : 'p-4 lg:p-6'">
+      <main class="flex-1 overflow-y-auto" :class="!showHeader || route.name === 'conversation-detail' || isBotBuilder ? '' : 'p-4 lg:p-6'">
         <RouterView />
       </main>
     </div>

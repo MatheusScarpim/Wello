@@ -172,6 +172,8 @@ export const messagesApi = {
     apiClient.get<{ mediaUrl: string }>(`/api/messages/${id}/media`),
   delete: (id: string) =>
     apiClient.delete(`/api/messages/${id}`),
+  sendNote: (conversationId: string, message: string) =>
+    apiClient.post<Message>('/api/messages/note', { conversationId, message }),
 }
 
 // Bots
@@ -449,6 +451,32 @@ export const iaApi = {
     apiClient.post<{ suggestion: string; confidence: number }>('/api/ia/suggestion', { conversationId, lastMessages }),
   improveMessage: (conversationId: string, message: string) =>
     apiClient.post<{ improved: string }>('/api/ia/improve-message', { conversationId, message }),
+}
+
+export const visualBotsApi = {
+  list: (search?: string, status?: string) => {
+    const params = new URLSearchParams()
+    if (search) params.set('search', search)
+    if (status) params.set('status', status)
+    const qs = params.toString()
+    return apiClient.get<any[]>(`/api/visual-bots${qs ? `?${qs}` : ''}`)
+  },
+  getById: (id: string) =>
+    apiClient.get<any>(`/api/visual-bots/${id}`),
+  create: (payload: { name: string; botId: string; description?: string }) =>
+    apiClient.post<any>('/api/visual-bots', payload),
+  update: (id: string, payload: any) =>
+    apiClient.put<any>(`/api/visual-bots/${id}`, payload),
+  delete: (id: string) =>
+    apiClient.delete(`/api/visual-bots/${id}`),
+  publish: (id: string) =>
+    apiClient.post<any>(`/api/visual-bots/${id}/publish`),
+  unpublish: (id: string) =>
+    apiClient.post<any>(`/api/visual-bots/${id}/unpublish`),
+  duplicate: (id: string) =>
+    apiClient.post<any>(`/api/visual-bots/${id}/duplicate`),
+  test: (id: string, message: string, sessionData?: Record<string, any>) =>
+    apiClient.post<any>(`/api/visual-bots/${id}/test`, { message, sessionData }),
 }
 
 export { apiClient }

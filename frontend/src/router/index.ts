@@ -133,6 +133,12 @@ const router = createRouter({
           meta: { title: 'Tags', roles: ['admin', 'supervisor'] }
         },
         {
+          path: 'canned-responses',
+          name: 'canned-responses',
+          component: () => import('@/views/CannedResponsesView.vue'),
+          meta: { title: 'Respostas Rapidas', roles: ['admin', 'supervisor'] }
+        },
+        {
           path: 'finalization-metrics',
           name: 'finalization-metrics',
           component: () => import('@/views/FinalizationMetricsView.vue'),
@@ -155,6 +161,24 @@ const router = createRouter({
           name: 'whatsapp',
           component: () => import('@/views/WhatsAppView.vue'),
           meta: { title: 'Instancias', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'bot-builder',
+          name: 'bot-builder-list',
+          component: () => import('@/views/BotBuilderListView.vue'),
+          meta: { title: 'Bot Builder', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'bot-builder/new',
+          name: 'bot-builder-new',
+          component: () => import('@/views/BotBuilderView.vue'),
+          meta: { title: 'Novo Bot', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'bot-builder/:id',
+          name: 'bot-builder-edit',
+          component: () => import('@/views/BotBuilderView.vue'),
+          meta: { title: 'Editar Bot', roles: ['admin', 'supervisor'] }
         }
       ]
     }

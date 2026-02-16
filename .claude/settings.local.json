@@ -10,7 +10,10 @@
       "Bash(xargs:*)",
       "Bash(docker system prune:*)",
       "Bash(docker-compose up:*)",
-      "Bash(npx vite build:*)"
+      "Bash(npx vite build:*)",
+      "Bash(cat:*)",
+      "Bash(git -C /c/Users/matheus.cuan/Documents/Github/Wello log --oneline --graph -15)",
+      "Bash(ls -la \"c:\\\\Users\\\\matheus.cuan\\\\Documents\\\\Github\\\\Wello\\\\frontend\\\\src\\\\types\"\" | grep -i \".ts \")"
     ]
   }
 }

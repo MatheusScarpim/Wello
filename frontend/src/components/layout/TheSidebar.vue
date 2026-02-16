@@ -25,7 +25,8 @@ import {
   Sparkles,
   Tags,
   ListFilter,
-  Archive
+  Archive,
+  Zap
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -93,13 +94,13 @@ const navGroups = computed<NavGroup[]>(() => {
         { name: 'Operadores', path: '/operators', icon: Users },
       ]
     },
-    // {
-    //   title: 'Automacao',
-    //   items: [
-    //     ...(whitelabelStore.isFeatureEnabled('enableBots') ? [{ name: 'Bots', path: '/bots', icon: Bot }] : []),
-    //     ...(whitelabelStore.isFeatureEnabled('enableWebhooks') ? [{ name: 'Webhooks', path: '/webhooks', icon: Webhook }] : []),
-    //   ]
-    // },
+    {
+      title: 'Automacao',
+      items: [
+        { name: 'Bot Builder', path: '/bot-builder', icon: Bot },
+        ...(whitelabelStore.isFeatureEnabled('enableWebhooks') ? [{ name: 'Webhooks', path: '/webhooks', icon: Webhook }] : []),
+      ]
+    },
     {
       title: 'IA',
       items: [
@@ -114,6 +115,7 @@ const navGroups = computed<NavGroup[]>(() => {
             // ...(whitelabelStore.isFeatureEnabled('enableExpenses') ? [{ name: 'Despesas', path: '/expenses', icon: Receipt }] : []),
             { name: 'Finalizações', path: '/finalizations', icon: ClipboardList },
             { name: 'Tags', path: '/tags', icon: Tags },
+            ...(whitelabelStore.isFeatureEnabled('enableCannedResponses') ? [{ name: 'Respostas Rapidas', path: '/canned-responses', icon: Zap }] : []),
             { name: 'Personalizacao', path: '/whitelabel', icon: Palette },
           ]
         }

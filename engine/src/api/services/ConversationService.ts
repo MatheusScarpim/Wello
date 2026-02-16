@@ -1034,6 +1034,20 @@ export class ConversationService {
     return result
   }
 
+  /**
+   * Define o departamento e status de uma conversa
+   */
+  async setDepartment(
+    id: string,
+    departmentId: string,
+    status: string = 'waiting',
+  ) {
+    const objectId = ObjectId.isValid(id) ? new ObjectId(id) : id
+    return await this.repository.updateOne({ _id: objectId } as any, {
+      $set: { departmentId, status, updatedAt: new Date() },
+    })
+  }
+
   async incrementUnreadCount(id: string) {
     const objectId = ObjectId.isValid(id) ? new ObjectId(id) : id
     return await this.repository.updateOne({ _id: objectId } as any, {

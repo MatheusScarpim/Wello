@@ -19,6 +19,9 @@ router.get('/:id', controller.getMessage)
 // Envia mensagem (com middleware de upload de mídia)
 router.post('/send', mediaUploadMiddleware, controller.sendMessage)
 
+// Cria nota interna na conversa
+router.post('/note', controller.sendNote)
+
 // Marca como lida
 router.patch('/:id/read', controller.markAsRead)
 

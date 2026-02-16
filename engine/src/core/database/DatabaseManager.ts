@@ -21,6 +21,8 @@ class DatabaseManager {
     'contacts',
     'whatsapp_sessions',
     'whatsapp_instances',
+    'canned_responses',
+    'visual_bot_definitions',
   ]
 
   private constructor() {
@@ -207,6 +209,20 @@ class DatabaseManager {
       await this.database
         .collection('whatsapp_instances')
         .createIndex({ autoConnect: 1 })
+
+      // Indices para visual_bot_definitions
+      await this.database
+        .collection('visual_bot_definitions')
+        .createIndex(
+          { botId: 1 },
+          { unique: true, name: 'visual_bot_definitions_botId' },
+        )
+      await this.database
+        .collection('visual_bot_definitions')
+        .createIndex({ status: 1 })
+      await this.database
+        .collection('visual_bot_definitions')
+        .createIndex({ updatedAt: -1 })
 
       console.log('🔍 Índices criados com sucesso')
     } catch (error: any) {

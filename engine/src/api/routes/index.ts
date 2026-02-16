@@ -18,10 +18,12 @@ import metaRoutes from './meta.routes'
 import operatorRoutes from './operator.routes'
 import queueRoutes from './queue.routes'
 import storageRoutes from './storage.routes'
+import cannedResponseRoutes from './canned-response.routes'
 import tagRoutes from './tag.routes'
 import webhookRoutes from './webhook.routes'
 import whatsappRoutes from './whatsapp.routes'
 import whatsappInstanceRoutes from './whatsapp-instance.routes'
+import visualBotRoutes from './visual-bot.routes'
 import whitelabelRoutes from './whitelabel.routes'
 
 /**
@@ -52,6 +54,8 @@ export function setupRoutes(): Array<{ path: string; router: Router }> {
     { path: '/api/contacts', router: contactRoutes },
     { path: '/api/ia', router: iaRoutes },
     { path: '/api/tags', router: tagRoutes },
+    { path: '/api/canned-responses', router: cannedResponseRoutes },
+    { path: '/api/visual-bots', router: visualBotRoutes },
   ]
 }
 

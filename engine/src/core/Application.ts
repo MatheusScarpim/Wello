@@ -138,7 +138,14 @@ export class Application {
    */
   private async registerBots(): Promise<void> {
     console.log('🤖 Registrando bots...')
-    console.log('⚠️ Nenhum bot registrado')
+    const { DynamicBotLoader } = await import('./bot/DynamicBotLoader')
+    await DynamicBotLoader.loadAllPublished()
+    const count = BotFactory.getRegisteredBots().length
+    if (count === 0) {
+      console.log('⚠️ Nenhum bot registrado')
+    } else {
+      console.log(`✅ ${count} bot(s) registrado(s)`)
+    }
   }
 
   /**
@@ -420,12 +427,25 @@ export class Application {
         // Processa com o bot
         const response = await BotFactory.processMessage(botId, context)
 
-        // Envia resposta
-        if (response.message && !response.skipMessage) {
+        // Envia resposta (texto, botoes, lista, media)
+        const hasContent =
+          (response.message && !response.skipMessage) ||
+          response.buttons ||
+          response.list ||
+          response.media
+        if (hasContent) {
           await this.sendResponse(
             message.identifier,
             message.provider,
             response,
+          )
+        }
+
+        // Transferencia para atendente humano
+        if (response.transferToHuman) {
+          await this.handleTransferToHuman(
+            message,
+            response.transferDepartmentId,
           )
         }
 
@@ -490,29 +510,54 @@ export class Application {
     response: any,
   ): Promise<void> {
     try {
+      // Providers que nao suportam interativos (buttons/lists)
+      const supportsInteractive = provider !== 'instagram'
+
       // Se tem lista interativa
       if (response.list) {
-        await MessagingService.sendMessage({
-          to,
-          provider: provider as any,
-          type: 'list',
-          listTitle: response.list.title,
-          listDescription: response.list.description,
-          listButtonText: response.list.buttonText,
-          listSections: response.list.sections,
-        })
+        if (supportsInteractive) {
+          await MessagingService.sendMessage({
+            to,
+            provider: provider as any,
+            type: 'list',
+            listTitle: response.list.title,
+            listDescription: response.list.description,
+            listButtonText: response.list.buttonText,
+            listSections: response.list.sections,
+          })
+        } else {
+          // Fallback: converte lista em texto formatado
+          const fallback = this.formatListAsText(response.list)
+          await MessagingService.sendMessage({
+            to,
+            provider: provider as any,
+            type: 'text',
+            message: fallback,
+          })
+        }
       }
       // Se tem botões interativos
       else if (response.buttons) {
-        await MessagingService.sendMessage({
-          to,
-          provider: provider as any,
-          type: 'buttons',
-          buttonsTitle: response.buttons.title,
-          buttonsDescription: response.buttons.description,
-          buttons: response.buttons.buttons,
-          buttonsFooter: response.buttons.footer,
-        })
+        if (supportsInteractive) {
+          await MessagingService.sendMessage({
+            to,
+            provider: provider as any,
+            type: 'buttons',
+            buttonsTitle: response.buttons.title,
+            buttonsDescription: response.buttons.description,
+            buttons: response.buttons.buttons,
+            buttonsFooter: response.buttons.footer,
+          })
+        } else {
+          // Fallback: converte botoes em texto formatado
+          const fallback = this.formatButtonsAsText(response.buttons)
+          await MessagingService.sendMessage({
+            to,
+            provider: provider as any,
+            type: 'text',
+            message: fallback,
+          })
+        }
       }
       // Se tem localização
       else if (response.location) {
@@ -561,6 +606,101 @@ export class Application {
     } catch (error) {
       console.error('❌ Erro ao enviar resposta:', error)
       throw error
+    }
+  }
+
+  /**
+   * Converte botoes interativos em texto formatado (fallback para providers sem suporte)
+   */
+  private formatButtonsAsText(buttons: any): string {
+    const lines: string[] = []
+    if (buttons.title) lines.push(`*${buttons.title}*`)
+    if (buttons.description) lines.push(buttons.description)
+    if (buttons.buttons?.length) {
+      lines.push('')
+      buttons.buttons.forEach((btn: any, i: number) => {
+        lines.push(`${i + 1}. ${btn.text}`)
+      })
+      lines.push('')
+      lines.push('_Responda com o numero da opcao desejada._')
+    }
+    if (buttons.footer) lines.push(`\n${buttons.footer}`)
+    return lines.join('\n')
+  }
+
+  /**
+   * Converte lista interativa em texto formatado (fallback para providers sem suporte)
+   */
+  private formatListAsText(list: any): string {
+    const lines: string[] = []
+    if (list.title) lines.push(`*${list.title}*`)
+    if (list.description) lines.push(list.description)
+    let counter = 1
+    if (list.sections?.length) {
+      for (const section of list.sections) {
+        lines.push('')
+        if (section.title) lines.push(`*${section.title}*`)
+        for (const row of section.rows || []) {
+          lines.push(`${counter}. ${row.title}${row.description ? ` - ${row.description}` : ''}`)
+          counter++
+        }
+      }
+      lines.push('')
+      lines.push('_Responda com o numero da opcao desejada._')
+    }
+    return lines.join('\n')
+  }
+
+  /**
+   * Transfere conversa do bot para a fila de atendimento humano
+   */
+  private async handleTransferToHuman(
+    message: any,
+    departmentId?: string,
+  ): Promise<void> {
+    try {
+      console.log(
+        `🔄 Transferindo para atendente humano: ${message.identifier}`,
+      )
+
+      // Cria/atualiza a conversa para garantir que existe no banco
+      const conversation = await this.conversationService.createConversation({
+        identifier: message.identifier,
+        provider: message.provider,
+        name: message.name,
+        photo: message.photo,
+        sessionName: message._sessionName,
+        instanceName: message._instanceName,
+      })
+
+      const conversationId = conversation._id.toString()
+
+      // Remove operador e coloca na fila
+      await this.conversationService.removeOperator(conversationId)
+
+      // Se tem departamento, atribui
+      if (departmentId) {
+        await this.conversationService.setDepartment(conversationId, departmentId)
+      }
+
+      // Salva mensagem de sistema indicando transferencia
+      await this.messageService.saveMessage({
+        conversationId,
+        message: departmentId
+          ? 'Bot transferiu a conversa para o departamento.'
+          : 'Bot transferiu a conversa para atendimento humano.',
+        type: 'system',
+        direction: 'outgoing',
+        status: 'sent',
+        from: 'system',
+        to: message.identifier,
+      })
+
+      console.log(
+        `✅ Conversa transferida para fila humana: ${message.identifier}`,
+      )
+    } catch (error) {
+      console.error('❌ Erro ao transferir para atendente:', error)
     }
   }
 

@@ -172,6 +172,7 @@ export interface Message {
   operatorName?: string
   quotedMessageId?: string
   quotedMsg?: QuotedMessage
+  isNote?: boolean
 }
 
 // Mensagem citada (reply)
@@ -183,7 +184,7 @@ export interface QuotedMessage {
   mediaUrl?: string
 }
 
-export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 'list' | 'buttons' | 'location' | 'contact' | 'ptt' | 'system' | 'sticker' | 'chat'
+export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 'list' | 'buttons' | 'location' | 'contact' | 'ptt' | 'system' | 'sticker' | 'chat' | 'note'
 
 export interface SendMessagePayload {
   to: string
