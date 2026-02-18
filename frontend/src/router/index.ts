@@ -163,6 +163,36 @@ const router = createRouter({
           meta: { title: 'Instancias', roles: ['admin', 'supervisor'] }
         },
         {
+          path: 'pipeline',
+          name: 'pipeline',
+          component: () => import('@/views/PipelineView.vue'),
+          meta: { title: 'Quadro', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'appointments',
+          name: 'appointments',
+          component: () => import('@/views/AppointmentsView.vue'),
+          meta: { title: 'Agenda', roles: ['operator', 'admin', 'supervisor'] }
+        },
+        {
+          path: 'availability',
+          name: 'availability',
+          component: () => import('@/views/AvailabilityView.vue'),
+          meta: { title: 'Disponibilidade', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'services',
+          name: 'services',
+          component: () => import('@/views/ServicesView.vue'),
+          meta: { title: 'Servicos', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'professionals',
+          name: 'professionals',
+          component: () => import('@/views/ProfessionalsView.vue'),
+          meta: { title: 'Profissionais', roles: ['admin', 'supervisor'] }
+        },
+        {
           path: 'bot-builder',
           name: 'bot-builder-list',
           component: () => import('@/views/BotBuilderListView.vue'),

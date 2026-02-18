@@ -13,6 +13,7 @@ export type VisualNodeType =
   | 'http_request'
   | 'delay'
   | 'ai_response'
+  | 'appointment_scheduling'
   | 'end'
 
 // ============================================
@@ -109,6 +110,21 @@ export interface AiResponseNodeData {
   routeToDepartment?: boolean
 }
 
+export interface AppointmentSchedulingNodeData {
+  serviceId?: string
+  professionalId?: string
+  askServiceMessage?: string
+  askProfessionalMessage?: string
+  askDateMessage?: string
+  askTimeMessage?: string
+  askNameMessage?: string
+  askPhoneMessage?: string
+  confirmMessage?: string
+  noSlotsMessage?: string
+  daysAhead?: number
+  responseVariable?: string
+}
+
 export interface EndNodeData {
   finalMessage?: string
   transferToHuman?: boolean
@@ -126,6 +142,7 @@ export type NodeData =
   | HttpRequestNodeData
   | DelayNodeData
   | AiResponseNodeData
+  | AppointmentSchedulingNodeData
   | EndNodeData
 
 // ============================================
@@ -366,6 +383,26 @@ export const NODE_TYPES: NodeTypeInfo[] = [
       maxTokens: 300,
       includeSessionContext: true,
     } as AiResponseNodeData,
+  },
+  {
+    type: 'appointment_scheduling',
+    label: 'Agendamento',
+    description: 'Agenda consulta/atendimento com profissional',
+    color: '#0d9488',
+    bgColor: '#f0fdfa',
+    borderColor: '#5eead4',
+    icon: 'calendar-check',
+    defaultData: {
+      askServiceMessage: 'Qual serviço deseja agendar?',
+      askProfessionalMessage: 'Com qual profissional?',
+      askDateMessage: 'Selecione uma data',
+      askTimeMessage: 'Selecione o horário',
+      askNameMessage: 'Qual seu nome?',
+      askPhoneMessage: 'Qual seu telefone para contato?',
+      confirmMessage: 'Agendamento confirmado! Obrigado.',
+      noSlotsMessage: 'Desculpe, não há horários disponíveis.',
+      daysAhead: 7,
+    } as AppointmentSchedulingNodeData,
   },
   {
     type: 'end',

@@ -25,6 +25,12 @@ import whatsappRoutes from './whatsapp.routes'
 import whatsappInstanceRoutes from './whatsapp-instance.routes'
 import visualBotRoutes from './visual-bot.routes'
 import whitelabelRoutes from './whitelabel.routes'
+import pipelineStageRoutes from './pipeline-stage.routes'
+import pipelineRoutes from './pipeline.routes'
+import appointmentRoutes from './appointment.routes'
+import availabilityRoutes from './availability.routes'
+import serviceRoutes from './service.routes'
+import professionalRoutes from './professional.routes'
 
 /**
  * Configurador central de rotas
@@ -56,6 +62,12 @@ export function setupRoutes(): Array<{ path: string; router: Router }> {
     { path: '/api/tags', router: tagRoutes },
     { path: '/api/canned-responses', router: cannedResponseRoutes },
     { path: '/api/visual-bots', router: visualBotRoutes },
+    { path: '/api/pipeline-stages', router: pipelineStageRoutes },
+    { path: '/api/pipeline', router: pipelineRoutes },
+    { path: '/api/appointments', router: appointmentRoutes },
+    { path: '/api/availability', router: availabilityRoutes },
+    { path: '/api/services', router: serviceRoutes },
+    { path: '/api/professionals', router: professionalRoutes },
   ]
 }
 

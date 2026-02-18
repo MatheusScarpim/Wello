@@ -109,6 +109,11 @@ class SocketServer {
     })
   }
 
+  emitPipelineUpdate(payload: any) {
+    if (!this.io) return
+    this.io.to('admins').emit('pipeline.updated', payload)
+  }
+
   emitConversationUpdate(
     payload: any,
     conversationId: string,

@@ -23,6 +23,11 @@ class DatabaseManager {
     'whatsapp_instances',
     'canned_responses',
     'visual_bot_definitions',
+    'pipeline_stages',
+    'appointments',
+    'availability_settings',
+    'services',
+    'professionals',
   ]
 
   private constructor() {
@@ -223,6 +228,22 @@ class DatabaseManager {
       await this.database
         .collection('visual_bot_definitions')
         .createIndex({ updatedAt: -1 })
+
+      // Índice para pipeline no conversations
+      await this.database
+        .collection('conversations')
+        .createIndex({ pipelineStageId: 1 })
+
+      // Índices para appointments
+      await this.database
+        .collection('appointments')
+        .createIndex({ date: 1 })
+      await this.database
+        .collection('appointments')
+        .createIndex({ contactId: 1 })
+      await this.database
+        .collection('appointments')
+        .createIndex({ operatorId: 1, date: 1 })
 
       console.log('🔍 Índices criados com sucesso')
     } catch (error: any) {

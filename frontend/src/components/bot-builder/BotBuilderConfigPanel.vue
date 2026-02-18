@@ -14,6 +14,7 @@ import SetVariableConfig from './config-panels/SetVariableConfig.vue'
 import HttpRequestConfig from './config-panels/HttpRequestConfig.vue'
 import DelayConfig from './config-panels/DelayConfig.vue'
 import AiResponseConfig from './config-panels/AiResponseConfig.vue'
+import AppointmentSchedulingConfig from './config-panels/AppointmentSchedulingConfig.vue'
 import EndConfig from './config-panels/EndConfig.vue'
 
 const store = useBotBuilderStore()
@@ -29,6 +30,7 @@ const configComponents: Record<string, any> = {
   http_request: markRaw(HttpRequestConfig),
   delay: markRaw(DelayConfig),
   ai_response: markRaw(AiResponseConfig),
+  appointment_scheduling: markRaw(AppointmentSchedulingConfig),
   end: markRaw(EndConfig),
 }
 

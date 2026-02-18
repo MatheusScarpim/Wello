@@ -26,7 +26,12 @@ import {
   Tags,
   ListFilter,
   Archive,
-  Zap
+  Zap,
+  KanbanSquare,
+  Calendar,
+  Clock,
+  Briefcase,
+  UserCircle
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -70,6 +75,12 @@ const navGroups = computed<NavGroup[]>(() => {
           { name: 'Assumir', path: '/assumir', icon: UserCheck },
           { name: 'Conversas', path: '/conversations', icon: MessageSquare },
         ]
+      },
+      {
+        title: 'Comercial',
+        items: [
+          { name: 'Agenda', path: '/appointments', icon: Calendar },
+        ]
       }
     ]
   }
@@ -88,6 +99,16 @@ const navGroups = computed<NavGroup[]>(() => {
           ]
         },
     {
+      title: 'Comercial',
+      items: [
+        { name: 'Quadro', path: '/pipeline', icon: KanbanSquare },
+        { name: 'Agenda', path: '/appointments', icon: Calendar },
+        { name: 'Serviços', path: '/services', icon: Briefcase },
+        { name: 'Profissionais', path: '/professionals', icon: UserCircle },
+        { name: 'Disponibilidade', path: '/availability', icon: Clock },
+      ]
+    },
+    {
       title: 'Equipe',
       items: [
         { name: 'Departamentos', path: '/departments', icon: Building2 },
@@ -95,7 +116,7 @@ const navGroups = computed<NavGroup[]>(() => {
       ]
     },
     {
-      title: 'Automacao',
+      title: 'Automação',
       items: [
         { name: 'Bot Builder', path: '/bot-builder', icon: Bot },
         ...(whitelabelStore.isFeatureEnabled('enableWebhooks') ? [{ name: 'Webhooks', path: '/webhooks', icon: Webhook }] : []),
@@ -110,13 +131,13 @@ const navGroups = computed<NavGroup[]>(() => {
         {
           title: 'Sistema',
           items: [
-            { name: 'Instancias', path: '/whatsapp', icon: Smartphone },
+            { name: 'Instâncias', path: '/whatsapp', icon: Smartphone },
             ...(whitelabelStore.isFeatureEnabled('enableStorage') ? [{ name: 'Storage', path: '/storage', icon: HardDrive }] : []),
             // ...(whitelabelStore.isFeatureEnabled('enableExpenses') ? [{ name: 'Despesas', path: '/expenses', icon: Receipt }] : []),
             { name: 'Finalizações', path: '/finalizations', icon: ClipboardList },
             { name: 'Tags', path: '/tags', icon: Tags },
-            ...(whitelabelStore.isFeatureEnabled('enableCannedResponses') ? [{ name: 'Respostas Rapidas', path: '/canned-responses', icon: Zap }] : []),
-            { name: 'Personalizacao', path: '/whitelabel', icon: Palette },
+            ...(whitelabelStore.isFeatureEnabled('enableCannedResponses') ? [{ name: 'Respostas Rápidas', path: '/canned-responses', icon: Zap }] : []),
+            { name: 'Personalização', path: '/whitelabel', icon: Palette },
           ]
         }
   ]

@@ -37,11 +37,13 @@ import {
   Wand2,
   Zap,
   StickyNote,
-  Volume2
+  Volume2,
+  Calendar
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import AuraResponseCard from '@/components/aura/AuraResponseCard.vue'
 import TransferModal from '@/components/modals/TransferModal.vue'
+import ConversationAppointments from '@/components/conversations/ConversationAppointments.vue'
 import { useToast } from 'vue-toastification'
 import { format } from 'date-fns'
 import type { Conversation, Message, MessageType, BotSession, Finalization, Tag as TagType, CannedResponse } from '@/types'
@@ -72,6 +74,7 @@ const isLoading = ref(true)
 const isSending = ref(false)
 const showActionsMenu = ref(false)
 const showTransferModal = ref(false)
+const showAppointmentsDrawer = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const previewMedia = ref<{ url: string; type: 'image' | 'video' } | null>(null)
 const swipeState = ref({
@@ -1475,6 +1478,16 @@ onUnmounted(() => {
 
       <!-- Action buttons -->
       <div class="flex items-center gap-1 flex-shrink-0">
+        <!-- Appointments Button -->
+        <button
+          @click="showAppointmentsDrawer = !showAppointmentsDrawer"
+          class="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full transition-all active:scale-95"
+          :class="showAppointmentsDrawer ? 'bg-teal-500 text-white' : 'bg-teal-50 text-teal-600 hover:bg-teal-100'"
+          title="Agendamentos"
+        >
+          <Calendar class="w-4 h-4" />
+        </button>
+
         <!-- AI Suggestion Button -->
         <button
           @click="requestAiSuggestion"
@@ -2505,6 +2518,14 @@ onUnmounted(() => {
       :conversation-id="conversationId"
       :current-operator-id="conversation?.operatorId"
       @transferred="router.push('/queue')"
+    />
+
+    <!-- Appointments Drawer -->
+    <ConversationAppointments
+      v-if="conversation && showAppointmentsDrawer"
+      :identifier="conversation.identifier"
+      :contact-name="conversation.name || conversation.identifier"
+      @close="showAppointmentsDrawer = false"
     />
   </div>
 </template>

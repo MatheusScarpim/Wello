@@ -1,3 +1,5 @@
+import crypto from 'crypto'
+
 import SocketServer from '@/api/socket/SocketServer'
 
 import conversationRepository from '../repositories/ConversationRepository'
@@ -252,6 +254,7 @@ export class MessageService {
       type: 'note',
       direction: 'outgoing',
       status: 'sent',
+      messageId: `note_${crypto.randomUUID()}`,
       isRead: true,
       isNote: true,
       createdAt: now,

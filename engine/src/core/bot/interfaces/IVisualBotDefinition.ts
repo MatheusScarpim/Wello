@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb'
 
 // ============================================
-// Tipos de Nos Visuais
+// Tipos de Nós Visuais
 // ============================================
 
 export type VisualNodeType =
@@ -15,6 +15,7 @@ export type VisualNodeType =
   | 'http_request'
   | 'delay'
   | 'ai_response'
+  | 'appointment_scheduling'
   | 'end'
 
 // ============================================
@@ -122,6 +123,21 @@ export interface AiResponseNodeData {
   routeToDepartment?: boolean
 }
 
+export interface AppointmentSchedulingNodeData {
+  serviceId?: string
+  professionalId?: string
+  askServiceMessage?: string
+  askProfessionalMessage?: string
+  askDateMessage?: string
+  askTimeMessage?: string
+  askNameMessage?: string
+  askPhoneMessage?: string
+  confirmMessage?: string
+  noSlotsMessage?: string
+  daysAhead?: number
+  responseVariable?: string
+}
+
 export interface EndNodeData {
   finalMessage?: string
   transferToHuman?: boolean
@@ -139,6 +155,7 @@ export type NodeData =
   | HttpRequestNodeData
   | DelayNodeData
   | AiResponseNodeData
+  | AppointmentSchedulingNodeData
   | EndNodeData
 
 // ============================================

@@ -14,13 +14,14 @@ import {
   HttpRequestNodeData,
   DelayNodeData,
   AiResponseNodeData,
+  AppointmentSchedulingNodeData,
   EndNodeData,
 } from './interfaces/IVisualBotDefinition'
 import { ConditionEvaluator } from './ConditionEvaluator'
 import { TemplateEngine } from './TemplateEngine'
 
 /**
- * Estagio dinamico que executa com base na configuracao de um VisualNode
+ * Estágio dinâmico que executa com base na configuração de um VisualNode
  */
 export class DynamicStage implements IBotStage {
   readonly stageNumber: number
@@ -62,10 +63,12 @@ export class DynamicStage implements IBotStage {
         return this.executeDelay()
       case 'ai_response':
         return this.executeAiResponse(context, tpl)
+      case 'appointment_scheduling':
+        return this.executeAppointmentScheduling(context, tpl)
       case 'end':
         return this.executeEnd(tpl)
       default:
-        return { message: 'Tipo de no desconhecido', endSession: true }
+        return { message: 'Tipo de nó desconhecido', endSession: true }
     }
   }
 
@@ -86,7 +89,7 @@ export class DynamicStage implements IBotStage {
   }
 
   // ============================================
-  // Executores por tipo de no
+  // Executores por tipo de nó
   // ============================================
 
   private executeStart(tpl: TemplateEngine): StageResponse {
@@ -136,7 +139,7 @@ export class DynamicStage implements IBotStage {
   ): StageResponse {
     const data = this.node.data as AskQuestionNodeData
 
-    // Se esta aguardando input, processar a resposta
+    // Se está aguardando input, processar a resposta
     if (context.sessionData?._awaitingInput === this.node.id) {
       const defaultEdge = this.getDefaultEdge()
       return {
@@ -164,15 +167,16 @@ export class DynamicStage implements IBotStage {
   ): StageResponse {
     const data = this.node.data as ButtonsNodeData
 
-    // Se esta aguardando resposta de botoes
+    // Se está aguardando resposta de botões
     if (context.sessionData?._awaitingInput === this.node.id) {
-      const selectedButton = data.buttons.find(
-        (b) =>
-          b.id === context.message ||
-          b.text.toLowerCase() === context.message.toLowerCase(),
+      const selectedButton = this.matchByIdOrIndex(
+        context.message,
+        data.buttons,
+        (b) => b.id,
+        (b) => b.text,
       )
 
-      // Buscar edge pelo ID do botao selecionado
+      // Buscar edge pelo ID do botão selecionado
       let targetEdge: VisualEdge | undefined
       if (selectedButton) {
         targetEdge = this.outgoingEdges.find(
@@ -197,7 +201,7 @@ export class DynamicStage implements IBotStage {
       }
     }
 
-    // Enviar botoes
+    // Enviar botões
     return {
       buttons: {
         title: tpl.render(data.title),
@@ -218,20 +222,17 @@ export class DynamicStage implements IBotStage {
   ): StageResponse {
     const data = this.node.data as ListNodeData
 
-    // Se esta aguardando resposta de lista
+    // Se está aguardando resposta de lista
     if (context.sessionData?._awaitingInput === this.node.id) {
-      let selectedRowId: string | undefined
-      for (const section of data.sections) {
-        const row = section.rows.find(
-          (r) =>
-            r.rowId === context.message ||
-            r.title.toLowerCase() === context.message.toLowerCase(),
-        )
-        if (row) {
-          selectedRowId = row.rowId
-          break
-        }
-      }
+      // Flatten all rows across sections for index-based matching
+      const allRows = data.sections.flatMap((s) => s.rows)
+      const selectedRow = this.matchByIdOrIndex(
+        context.message,
+        allRows,
+        (r) => r.rowId,
+        (r) => r.title,
+      )
+      const selectedRowId = selectedRow?.rowId
 
       // Buscar edge pelo rowId selecionado
       let targetEdge: VisualEdge | undefined
@@ -303,7 +304,7 @@ export class DynamicStage implements IBotStage {
       }
     }
 
-    // Nenhuma condicao atendida — usar edge "else"
+    // Nenhuma condição atendida — usar edge "else"
     const elseEdge =
       this.outgoingEdges.find((e) => e.sourceHandle === 'else') ||
       this.getDefaultEdge()
@@ -383,7 +384,7 @@ export class DynamicStage implements IBotStage {
         skipMessage: true,
       }
     } catch (error: any) {
-      console.error('Erro na requisicao HTTP do bot:', error.message)
+      console.error('Erro na requisição HTTP do bot:', error.message)
 
       const updates: Record<string, any> = {}
       if (data.responseVariable) {
@@ -431,9 +432,9 @@ export class DynamicStage implements IBotStage {
     try {
       const openaiApiKey = process.env.OPENAI_API_KEY
       if (!openaiApiKey) {
-        console.warn('⚠️ OPENAI_API_KEY nao configurada, usando fallback')
+        console.warn('⚠️ OPENAI_API_KEY não configurada, usando fallback')
         return {
-          message: 'Desculpe, o servico de IA nao esta disponivel no momento.',
+          message: 'Desculpe, o serviço de IA não está disponível no momento.',
           nextStage: defaultEdge
             ? this.nodeIdToStage.get(defaultEdge.target)
             : undefined,
@@ -455,22 +456,22 @@ export class DynamicStage implements IBotStage {
         }))
 
         const deptList = departments
-          .map((d) => `- ID: "${d.id}" | Nome: "${d.name}"${d.description ? ` | Descricao: ${d.description}` : ''}`)
+          .map((d) => `- ID: "${d.id}" | Nome: "${d.name}"${d.description ? ` | Descrição: ${d.description}` : ''}`)
           .join('\n')
 
-        systemPrompt += `\n\nVoce tambem e um roteador de atendimento. Com base na mensagem do usuario, escolha o departamento mais adequado.
+        systemPrompt += `\n\nVocê também é um roteador de atendimento. Com base na mensagem do usuário, escolha o departamento mais adequado.
 
-Departamentos disponiveis:
+Departamentos disponíveis:
 ${deptList}
 
-IMPORTANTE: Responda OBRIGATORIAMENTE em JSON valido com este formato:
-{"message": "sua resposta ao usuario", "departmentId": "id_do_departamento_escolhido"}
+IMPORTANTE: Responda OBRIGATORIAMENTE em JSON válido com este formato:
+{"message": "sua resposta ao usuário", "departmentId": "id_do_departamento_escolhido"}
 
 Se nenhum departamento for adequado, use "departmentId": null.
 Retorne APENAS o JSON, sem texto adicional.`
       }
 
-      // Montar user prompt com mensagem do usuario + contexto de sessao
+      // Montar user prompt com mensagem do usuário + contexto de sessão
       let userPrompt = context.message || ''
       if (data.includeSessionContext && context.sessionData) {
         const sessionVars = Object.entries(context.sessionData)
@@ -525,7 +526,7 @@ Retorne APENAS o JSON, sem texto adicional.`
         updateSessionData: Object.keys(updates).length > 0 ? updates : undefined,
       }
     } catch (error: any) {
-      console.error('Erro no no de IA do bot:', error.message)
+      console.error('Erro no nó de IA do bot:', error.message)
 
       return {
         message: 'Desculpe, ocorreu um erro ao processar com a IA.',
@@ -575,7 +576,7 @@ Retorne APENAS o JSON, sem texto adicional.`
         }
       }
 
-      // IA nao escolheu departamento — segue o fluxo normal
+      // IA não escolheu departamento — segue o fluxo normal
       return {
         message: aiMessage || undefined,
         nextStage: defaultEdge
@@ -585,13 +586,518 @@ Retorne APENAS o JSON, sem texto adicional.`
       }
     } catch {
       // Falha ao parsear JSON — usar resposta como texto e seguir fluxo
-      console.warn('⚠️ IA nao retornou JSON valido para roteamento, usando como texto')
+      console.warn('⚠️ IA não retornou JSON válido para roteamento, usando como texto')
       return {
         message: rawContent || undefined,
         nextStage: defaultEdge
           ? this.nodeIdToStage.get(defaultEdge.target)
           : undefined,
       }
+    }
+  }
+
+  private async executeAppointmentScheduling(
+    context: MessageContext,
+    tpl: TemplateEngine,
+  ): Promise<StageResponse> {
+    const data = this.node.data as AppointmentSchedulingNodeData
+    const defaultEdge = this.getDefaultEdge()
+    const awaiting = context.sessionData?._awaitingInput as string | undefined
+    const nodeId = this.node.id
+
+    try {
+      const appointmentRepo = (await import('@/api/repositories/AppointmentRepository')).default
+      const serviceRepo = (await import('@/api/repositories/ServiceRepository')).default
+      const professionalRepo = (await import('@/api/repositories/ProfessionalRepository')).default
+      const availabilityRepo = (await import('@/api/repositories/AvailabilityRepository')).default
+
+      // Step 1: Choose service (if not preset)
+      if (!data.serviceId && awaiting !== `${nodeId}_service` && awaiting !== `${nodeId}_professional` && awaiting !== `${nodeId}_date` && awaiting !== `${nodeId}_time` && awaiting !== `${nodeId}_name` && awaiting !== `${nodeId}_phone`) {
+        const services = await serviceRepo.findAll()
+        if (services.length === 0) {
+          return {
+            message: data.noSlotsMessage || 'Desculpe, não há serviços disponíveis no momento.',
+            nextStage: defaultEdge ? this.nodeIdToStage.get(defaultEdge.target) : undefined,
+          }
+        }
+
+        if (services.length <= 3) {
+          return {
+            buttons: {
+              title: data.askServiceMessage || 'Qual serviço deseja agendar?',
+              description: 'Selecione uma opção',
+              buttons: services.map((s) => ({ id: s._id!.toString(), text: s.name })),
+            },
+            updateSessionData: { _awaitingInput: `${nodeId}_service` },
+          }
+        }
+
+        return {
+          list: {
+            title: data.askServiceMessage || 'Qual serviço deseja agendar?',
+            description: 'Selecione o serviço desejado',
+            buttonText: 'Ver serviços',
+            sections: [{
+              title: 'Serviços',
+              rows: services.map((s) => ({
+                rowId: s._id!.toString(),
+                title: s.name,
+                description: s.description || `${s.defaultDuration} min`,
+              })),
+            }],
+          },
+          updateSessionData: { _awaitingInput: `${nodeId}_service` },
+        }
+      }
+
+      // Process service selection
+      if (awaiting === `${nodeId}_service`) {
+        const services = await serviceRepo.findAll()
+        const selected = this.matchByIdOrIndex(
+          context.message,
+          services,
+          (s) => s._id!.toString(),
+          (s) => s.name,
+        )
+        const serviceId = selected ? selected._id!.toString() : context.message
+        const serviceName = selected?.name || context.message
+        const serviceDuration = selected?.defaultDuration || 30
+
+        // Go to professional selection
+        const professionals = data.professionalId
+          ? []
+          : await professionalRepo.findActive()
+
+        if (!data.professionalId && professionals.length > 0) {
+          // Filter by service if professionals have serviceIds
+          const filtered = professionals.filter(
+            (p) => p.serviceIds.length === 0 || p.serviceIds.includes(serviceId),
+          )
+          const profList = filtered.length > 0 ? filtered : professionals
+
+          if (profList.length <= 3) {
+            return {
+              buttons: {
+                title: data.askProfessionalMessage || 'Com qual profissional?',
+                description: serviceName,
+                buttons: profList.map((p) => ({ id: p._id!.toString(), text: p.name })),
+              },
+              updateSessionData: {
+                _awaitingInput: `${nodeId}_professional`,
+                _apt_serviceId: serviceId,
+                _apt_serviceName: serviceName,
+                _apt_duration: serviceDuration,
+              },
+            }
+          }
+
+          return {
+            list: {
+              title: data.askProfessionalMessage || 'Com qual profissional?',
+              description: serviceName,
+              buttonText: 'Ver profissionais',
+              sections: [{
+                title: 'Profissionais',
+                rows: profList.map((p) => ({
+                  rowId: p._id!.toString(),
+                  title: p.name,
+                })),
+              }],
+            },
+            updateSessionData: {
+              _awaitingInput: `${nodeId}_professional`,
+              _apt_serviceId: serviceId,
+              _apt_serviceName: serviceName,
+              _apt_duration: serviceDuration,
+            },
+          }
+        }
+
+        // Skip professional, go to date
+        return this.showDateSelection(data, {
+          _apt_serviceId: serviceId,
+          _apt_serviceName: serviceName,
+          _apt_duration: serviceDuration,
+          _apt_professionalId: data.professionalId || '',
+          _apt_professionalName: '',
+        })
+      }
+
+      // Step 2: Professional selected → show dates
+      if (awaiting === `${nodeId}_professional`) {
+        const professionals = await professionalRepo.findActive()
+        const selected = this.matchByIdOrIndex(
+          context.message,
+          professionals,
+          (p) => p._id!.toString(),
+          (p) => p.name,
+        )
+
+        return this.showDateSelection(data, {
+          _apt_professionalId: selected ? selected._id!.toString() : context.message,
+          _apt_professionalName: selected?.name || context.message,
+        })
+      }
+
+      // Step 1b: If service is preset, start with professional or date
+      if (data.serviceId && !awaiting) {
+        const service = await serviceRepo.findById(data.serviceId)
+
+        if (!data.professionalId) {
+          const professionals = await professionalRepo.findActive()
+          const filtered = professionals.filter(
+            (p) => p.serviceIds.length === 0 || p.serviceIds.includes(data.serviceId!),
+          )
+          const profList = filtered.length > 0 ? filtered : professionals
+
+          if (profList.length > 0) {
+            if (profList.length <= 3) {
+              return {
+                buttons: {
+                  title: data.askProfessionalMessage || 'Com qual profissional?',
+                  description: service?.name || '',
+                  buttons: profList.map((p) => ({ id: p._id!.toString(), text: p.name })),
+                },
+                updateSessionData: {
+                  _awaitingInput: `${nodeId}_professional`,
+                  _apt_serviceId: data.serviceId,
+                  _apt_serviceName: service?.name || '',
+                  _apt_duration: service?.defaultDuration || 30,
+                },
+              }
+            }
+
+            return {
+              list: {
+                title: data.askProfessionalMessage || 'Com qual profissional?',
+                description: service?.name || '',
+                buttonText: 'Ver profissionais',
+                sections: [{
+                  title: 'Profissionais',
+                  rows: profList.map((p) => ({
+                    rowId: p._id!.toString(),
+                    title: p.name,
+                  })),
+                }],
+              },
+              updateSessionData: {
+                _awaitingInput: `${nodeId}_professional`,
+                _apt_serviceId: data.serviceId,
+                _apt_serviceName: service?.name || '',
+                _apt_duration: service?.defaultDuration || 30,
+              },
+            }
+          }
+        }
+
+        // Both service and professional preset → show dates
+        return this.showDateSelection(data, {
+          _apt_serviceId: data.serviceId,
+          _apt_serviceName: service?.name || '',
+          _apt_duration: service?.defaultDuration || 30,
+          _apt_professionalId: data.professionalId || '',
+          _apt_professionalName: '',
+        })
+      }
+
+      // Step 3: Date selected → show time slots
+      if (awaiting === `${nodeId}_date`) {
+        // Rebuild available dates to support numeric index matching
+        const daysAhead = data.daysAhead || 7
+        const settingsForDates = await availabilityRepo.getSettings()
+        const dayNamesForDates = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+        const availDates: string[] = []
+        const todayDate = new Date()
+        for (let i = 0; i < daysAhead && availDates.length < 10; i++) {
+          const d = new Date(todayDate)
+          d.setDate(d.getDate() + i)
+          const dn = dayNamesForDates[d.getDay()]
+          if (settingsForDates.schedule[dn]?.enabled) {
+            const ds = d.toISOString().split('T')[0]
+            if (!settingsForDates.blockedDates?.includes(ds)) {
+              availDates.push(ds)
+            }
+          }
+        }
+
+        // Match by exact date string or numeric index
+        const matchedDate = this.matchByIdOrIndex(
+          context.message,
+          availDates,
+          (d) => d,
+          (d) => d,
+        )
+        const dateStr = matchedDate || context.message
+        const settings = settingsForDates
+
+        // Get day of week
+        const dateObj = new Date(dateStr + 'T12:00:00')
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+        const dayName = dayNames[dateObj.getDay()]
+        const daySchedule = settings.schedule[dayName]
+
+        if (!daySchedule || !daySchedule.enabled) {
+          return {
+            message: 'Este dia não está disponível. Por favor, selecione outro dia.',
+            updateSessionData: { _awaitingInput: `${nodeId}_date` },
+          }
+        }
+
+        // Generate time slots
+        const duration = (context.sessionData?._apt_duration as number) || settings.slotDuration || 30
+        const [startH, startM] = daySchedule.start.split(':').map(Number)
+        const [endH, endM] = daySchedule.end.split(':').map(Number)
+        const startMinutes = startH * 60 + startM
+        const endMinutes = endH * 60 + endM
+
+        // Get existing appointments for this date
+        const startDate = new Date(dateStr + 'T00:00:00')
+        const endDate = new Date(dateStr + 'T23:59:59')
+        const existingApts = await appointmentRepo.findByDateRange(startDate, endDate)
+
+        const slots: Array<{ time: string; available: boolean }> = []
+        for (let m = startMinutes; m + duration <= endMinutes; m += duration) {
+          const h = Math.floor(m / 60)
+          const min = m % 60
+          const timeStr = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+
+          // Check conflicts
+          const slotStart = new Date(`${dateStr}T${timeStr}:00`)
+          const slotEnd = new Date(slotStart.getTime() + duration * 60000)
+          const hasConflict = existingApts.some((apt) => {
+            const aptStart = new Date(apt.date)
+            const aptEnd = new Date(aptStart.getTime() + (apt.duration || 30) * 60000)
+            return aptStart < slotEnd && aptEnd > slotStart
+          })
+
+          if (!hasConflict) {
+            slots.push({ time: timeStr, available: true })
+          }
+        }
+
+        if (slots.length === 0) {
+          return {
+            message: data.noSlotsMessage || 'Não há horários disponíveis para esta data. Tente outra data.',
+            updateSessionData: { _awaitingInput: `${nodeId}_date` },
+          }
+        }
+
+        // Show time slots (max 10 in list)
+        const displaySlots = slots.slice(0, 10)
+        return {
+          list: {
+            title: data.askTimeMessage || 'Selecione o horário',
+            description: `Horários disponíveis para ${dateStr}`,
+            buttonText: 'Ver horários',
+            sections: [{
+              title: 'Horários',
+              rows: displaySlots.map((s) => ({
+                rowId: s.time,
+                title: s.time,
+                description: `${duration} minutos`,
+              })),
+            }],
+          },
+          updateSessionData: {
+            _awaitingInput: `${nodeId}_time`,
+            _apt_date: dateStr,
+          },
+        }
+      }
+
+      // Step 4: Time selected → collect name
+      if (awaiting === `${nodeId}_time`) {
+        // Rebuild slots to support numeric index matching
+        const sessionForTime = context.sessionData || {}
+        const dateForSlots = sessionForTime._apt_date as string
+        const settingsForSlots = await availabilityRepo.getSettings()
+        const dayNamesForSlots = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+        const dateObjForSlots = new Date(dateForSlots + 'T12:00:00')
+        const dayScheduleForSlots = settingsForSlots.schedule[dayNamesForSlots[dateObjForSlots.getDay()]]
+        let availSlots: string[] = []
+        if (dayScheduleForSlots?.enabled) {
+          const dur = (sessionForTime._apt_duration as number) || settingsForSlots.slotDuration || 30
+          const [sH, sM] = dayScheduleForSlots.start.split(':').map(Number)
+          const [eH, eM] = dayScheduleForSlots.end.split(':').map(Number)
+          const sMin = sH * 60 + sM
+          const eMin = eH * 60 + eM
+          const sDate = new Date(dateForSlots + 'T00:00:00')
+          const eDateRange = new Date(dateForSlots + 'T23:59:59')
+          const existingForSlots = await appointmentRepo.findByDateRange(sDate, eDateRange)
+          for (let m = sMin; m + dur <= eMin; m += dur) {
+            const hh = String(Math.floor(m / 60)).padStart(2, '0')
+            const mm = String(m % 60).padStart(2, '0')
+            const ts = `${hh}:${mm}`
+            const slotS = new Date(`${dateForSlots}T${ts}:00`)
+            const slotE = new Date(slotS.getTime() + dur * 60000)
+            const conflict = existingForSlots.some((a) => {
+              const aS = new Date(a.date)
+              const aE = new Date(aS.getTime() + (a.duration || 30) * 60000)
+              return aS < slotE && aE > slotS
+            })
+            if (!conflict) availSlots.push(ts)
+          }
+        }
+
+        const matchedTime = this.matchByIdOrIndex(
+          context.message,
+          availSlots,
+          (t) => t,
+          (t) => t,
+        )
+        const time = matchedTime || context.message
+
+        return {
+          message: data.askNameMessage || 'Qual seu nome?',
+          updateSessionData: {
+            _awaitingInput: `${nodeId}_name`,
+            _apt_time: time,
+          },
+        }
+      }
+
+      // Step 5: Name collected → collect phone
+      if (awaiting === `${nodeId}_name`) {
+        return {
+          message: data.askPhoneMessage || 'Qual seu telefone para contato?',
+          updateSessionData: {
+            _awaitingInput: `${nodeId}_phone`,
+            _apt_contactName: context.message,
+          },
+        }
+      }
+
+      // Step 6: Phone collected → create appointment
+      if (awaiting === `${nodeId}_phone`) {
+        const sessionData = context.sessionData || {}
+        const dateStr = sessionData._apt_date as string
+        const timeStr = sessionData._apt_time as string
+        const duration = (sessionData._apt_duration as number) || 30
+        const dateTime = `${dateStr}T${timeStr}:00`
+
+        const appointmentData = {
+          title: (sessionData._apt_serviceName as string) || 'Agendamento via Bot',
+          date: new Date(dateTime),
+          duration,
+          status: 'scheduled' as const,
+          reminderSent: false,
+          contactName: sessionData._apt_contactName as string || '',
+          contactIdentifier: context.message || context.identifier || '',
+          serviceId: sessionData._apt_serviceId as string || undefined,
+          serviceName: sessionData._apt_serviceName as string || undefined,
+          professionalId: sessionData._apt_professionalId as string || undefined,
+          professionalName: sessionData._apt_professionalName as string || undefined,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+
+        const result = await appointmentRepo.create(appointmentData as any)
+        const appointmentId = result.insertedId?.toString() || ''
+
+        // Build confirmation message
+        const confirmMsg = tpl.render(
+          data.confirmMessage ||
+          `Agendamento confirmado!\n\nServiço: ${sessionData._apt_serviceName || 'N/A'}\nData: ${dateStr}\nHorário: ${timeStr}\nDuração: ${duration} min\nNome: ${sessionData._apt_contactName || 'N/A'}`
+        )
+
+        // Clean up session vars
+        const cleanupUpdates: Record<string, any> = {
+          _awaitingInput: null,
+          _apt_serviceId: null,
+          _apt_serviceName: null,
+          _apt_duration: null,
+          _apt_professionalId: null,
+          _apt_professionalName: null,
+          _apt_date: null,
+          _apt_time: null,
+          _apt_contactName: null,
+        }
+        if (data.responseVariable) {
+          cleanupUpdates[data.responseVariable] = appointmentId
+        }
+
+        return {
+          message: confirmMsg,
+          nextStage: defaultEdge ? this.nodeIdToStage.get(defaultEdge.target) : undefined,
+          updateSessionData: cleanupUpdates,
+        }
+      }
+    } catch (error: any) {
+      console.error('Erro no nó de agendamento do bot:', error.message)
+      return {
+        message: 'Desculpe, ocorreu um erro ao processar o agendamento.',
+        nextStage: defaultEdge ? this.nodeIdToStage.get(defaultEdge.target) : undefined,
+      }
+    }
+
+    // Fallback
+    return {
+      message: 'Desculpe, ocorreu um erro no fluxo de agendamento.',
+      nextStage: defaultEdge ? this.nodeIdToStage.get(defaultEdge.target) : undefined,
+    }
+  }
+
+  private async showDateSelection(
+    data: AppointmentSchedulingNodeData,
+    sessionUpdates: Record<string, any>,
+  ): Promise<StageResponse> {
+    const nodeId = this.node.id
+    const daysAhead = data.daysAhead || 7
+    const availabilityRepo = (await import('@/api/repositories/AvailabilityRepository')).default
+    const settings = await availabilityRepo.getSettings()
+
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+    const dayLabels: Record<string, string> = {
+      sunday: 'Domingo', monday: 'Segunda', tuesday: 'Terça',
+      wednesday: 'Quarta', thursday: 'Quinta', friday: 'Sexta', saturday: 'Sábado',
+    }
+
+    const availableDates: Array<{ date: string; label: string }> = []
+    const today = new Date()
+
+    for (let i = 0; i < daysAhead && availableDates.length < 10; i++) {
+      const d = new Date(today)
+      d.setDate(d.getDate() + i)
+      const dayName = dayNames[d.getDay()]
+
+      if (settings.schedule[dayName]?.enabled) {
+        const dateStr = d.toISOString().split('T')[0]
+        if (!settings.blockedDates?.includes(dateStr)) {
+          const dayNum = String(d.getDate()).padStart(2, '0')
+          const monthNum = String(d.getMonth() + 1).padStart(2, '0')
+          availableDates.push({
+            date: dateStr,
+            label: `${dayLabels[dayName]} ${dayNum}/${monthNum}`,
+          })
+        }
+      }
+    }
+
+    if (availableDates.length === 0) {
+      return {
+        message: data.noSlotsMessage || 'Desculpe, não há datas disponíveis no momento.',
+        nextStage: this.getDefaultEdge() ? this.nodeIdToStage.get(this.getDefaultEdge()!.target) : undefined,
+      }
+    }
+
+    return {
+      list: {
+        title: data.askDateMessage || 'Selecione uma data',
+        description: 'Datas disponíveis para agendamento',
+        buttonText: 'Ver datas',
+        sections: [{
+          title: 'Datas',
+          rows: availableDates.map((d) => ({
+            rowId: d.date,
+            title: d.label,
+            description: d.date,
+          })),
+        }],
+      },
+      updateSessionData: {
+        ...sessionUpdates,
+        _awaitingInput: `${nodeId}_date`,
+      },
     }
   }
 
@@ -617,5 +1123,34 @@ Retorne APENAS o JSON, sem texto adicional.`
         (e) => !e.sourceHandle || e.sourceHandle === 'default',
       ) || this.outgoingEdges[0]
     )
+  }
+
+  /**
+   * Matches user input against a list of items by id, label, or 1-based numeric index.
+   * Supports non-interactive channels where users reply with "1", "2", etc.
+   */
+  private matchByIdOrIndex<T>(
+    input: string,
+    items: T[],
+    getId: (item: T) => string,
+    getLabel: (item: T) => string,
+  ): T | undefined {
+    // Match by exact id
+    const byId = items.find((item) => getId(item) === input)
+    if (byId) return byId
+
+    // Match by label (case-insensitive)
+    const byLabel = items.find(
+      (item) => getLabel(item).toLowerCase() === input.toLowerCase(),
+    )
+    if (byLabel) return byLabel
+
+    // Match by 1-based numeric index
+    const num = parseInt(input, 10)
+    if (!isNaN(num) && num >= 1 && num <= items.length) {
+      return items[num - 1]
+    }
+
+    return undefined
   }
 }

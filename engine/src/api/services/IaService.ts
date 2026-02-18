@@ -676,176 +676,173 @@ Escreva a versao melhorada (apenas a mensagem, nada mais):`
   ])
 
   private buildGenerateBotSystemPrompt(): string {
-    return `Voce e um arquiteto especialista em bots conversacionais para WhatsApp. Seu trabalho e projetar bots completos, profissionais e realistas.
+    return `Voce e um arquiteto de bots para WhatsApp. Gere bots profissionais seguindo o schema JSON fornecido.
 
-=============================================
-TIPOS DE NOS DISPONIVEIS
-=============================================
+REGRAS DE EDGES (sourceHandle):
+- Nos lineares (start, send_message, ask_question, set_variable, delay, ai_response, http_request): sourceHandle = null
+- buttons: sourceHandle = id do botao (btn_1, btn_2, btn_3). Max 3 botoes.
+- list: sourceHandle = rowId (row_1, row_2). Use para 4+ opcoes.
+- condition: sourceHandle = id da condicao (cond_1) ou "else". SEMPRE inclua "else".
+- Todo no exceto "end" DEVE ter edge saindo. Todo caminho termina em "end".
 
-1. "start" — Ponto de entrada (OBRIGATORIO, exatamente 1 por bot).
-   Data: { "welcomeMessage": "mensagem de boas-vindas opcional" }
-   Quando usar: Sempre. E o primeiro no de todo bot.
+REGRAS:
+- IDs: node_1, node_2... Edges: edge_X_Y. Positions: { x: 0, y: 0 } sempre.
+- Campos nao usados por um tipo de no devem ser null.
+- headersJson: string JSON para headers HTTP (ex: "{\\"Content-Type\\": \\"application/json\\"}").
+- validation.type: "none", "email", "phone", "number" ou "options".
+- Mensagens curtas (2-3 linhas), delays 1500-2000ms entre mensagens, colete nome no inicio ({{cliente_nome}}), ofereca falar com humano, emojis com moderacao, portugues BR, variaveis em snake_case.`
+  }
 
-2. "send_message" — Envia uma mensagem ao usuario.
-   Data: { "messageType": "text", "message": "texto" }
-   Quando usar: Para informar, confirmar, apresentar dados, enviar resumos.
-   Dicas: Use {{variavel}} para interpolar dados coletados. Quebre textos longos em multiplos send_message com delay entre eles para simular digitacao natural.
+  private buildBotJsonSchema() {
+    const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] })
+    const ns = nullable({ type: 'string' })
+    const nn = nullable({ type: 'number' })
+    const nb = nullable({ type: 'boolean' })
 
-3. "ask_question" — Faz uma pergunta e salva a resposta numa variavel.
-   Data: { "question": "pergunta", "variableName": "nome_var", "validation": { "type": "none"|"email"|"phone"|"number"|"options", "value": "op1,op2 (se options)", "errorMessage": "msg de erro" } }
-   Quando usar: Para coletar dados do usuario (nome, email, telefone, CPF, etc).
-   Dicas: Sempre use validation.type adequado. Para email use "email", para telefone "phone", para numeros "number". Nomes de variavel devem ser descritivos: "cliente_nome", "cliente_email", "cliente_telefone".
-
-4. "buttons" — Botoes interativos (MAXIMO 3 botoes, limitacao do WhatsApp).
-   Data: { "title": "titulo", "description": "descricao explicativa", "buttons": [{ "id": "btn_1", "text": "Texto" }], "variableName": "var_escolha" }
-   REGRA CRITICA: Cada edge saindo de buttons DEVE ter sourceHandle = id do botao (ex: "btn_1", "btn_2", "btn_3").
-   Quando usar: Para menus com 2-3 opcoes, confirmacoes (Sim/Nao), escolhas rapidas.
-
-5. "list" — Lista interativa com secoes (para 4+ opcoes).
-   Data: { "title": "titulo", "description": "descricao", "buttonText": "texto do botao que abre a lista", "sections": [{ "title": "Secao", "rows": [{ "rowId": "row_1", "title": "Opcao", "description": "descricao" }] }], "variableName": "var_escolha" }
-   REGRA CRITICA: Cada edge saindo de list DEVE ter sourceHandle = rowId correspondente (ex: "row_1", "row_2").
-   Quando usar: Para catalogos, multiplas categorias, cardapios, listagem de servicos.
-
-6. "condition" — Ramificacao condicional do fluxo.
-   Data: { "conditions": [{ "id": "cond_1", "label": "Descricao da condicao", "operator": "equals"|"contains"|"not_equals"|"not_contains"|"starts_with"|"greater_than"|"less_than"|"is_empty"|"is_not_empty", "variable": "nome_var", "value": "valor" }] }
-   REGRA CRITICA: Cada edge DEVE ter sourceHandle = id da condicao (ex: "cond_1") ou "else" para fallback.
-   Quando usar: Para validar dados, verificar respostas, rotear com base em variaveis.
-   Dicas: SEMPRE inclua uma condicao "else" como fallback. Use para verificar horario comercial, tipo de cliente, etc.
-
-7. "set_variable" — Define ou atualiza variaveis.
-   Data: { "assignments": [{ "variable": "nome_var", "value": "valor ou {{outra_var}}" }] }
-   Quando usar: Para preparar dados, combinar informacoes, definir flags.
-
-8. "http_request" — Chamada HTTP a APIs externas.
-   Data: { "method": "GET"|"POST"|"PUT"|"DELETE", "url": "https://api.exemplo.com/endpoint", "headers": { "Content-Type": "application/json" }, "body": "{\\"campo\\": \\"{{variavel}}\\"}", "responseVariable": "api_response", "timeout": 10000 }
-   Quando usar: Para integrar com CRMs, sistemas de agendamento, consultar CEP, processar pagamentos.
-   Dicas: Sempre defina responseVariable. Use timeout de 10000ms. Interpole variaveis no body com {{var}}.
-
-9. "delay" — Pausa antes de continuar.
-   Data: { "delayMs": 2000 }
-   Quando usar: Entre mensagens consecutivas (1500-3000ms) para parecer natural, antes de buscar dados (500ms).
-
-10. "ai_response" — Resposta gerada por IA contextual.
-    Data: { "systemPrompt": "instrucoes detalhadas para a IA", "temperature": 0.7, "maxTokens": 300, "responseVariable": "resposta_ia", "includeSessionContext": true }
-    Quando usar: Para FAQ inteligente, respostas contextuais, quando as opcoes sao muito variadas para prever.
-    Dicas: Escreva systemPrompt detalhado com contexto da empresa, tom de voz, e limites. Sempre use includeSessionContext: true.
-
-11. "end" — Finaliza o atendimento do bot.
-    Data: { "finalMessage": "mensagem de despedida", "transferToHuman": true|false, "transferDepartmentId": "id_departamento" }
-    Quando usar: Para encerrar conversa ou transferir para atendente humano.
-    Dicas: Use transferToHuman: true quando o bot nao consegue resolver. Inclua sempre uma mensagem de despedida educada.
-
-=============================================
-REGRAS DE CONEXAO (edges)
-=============================================
-
-Formato de edge: { "id": "string_unica", "source": "id_no_origem", "target": "id_no_destino", "sourceHandle": "handle" }
-
-- Nos LINEARES (start, send_message, ask_question, set_variable, delay, ai_response, http_request): NAO usam sourceHandle (omitir o campo)
-- Buttons: sourceHandle = id do botao (ex: "btn_1"). Cada botao DEVE ter exatamente 1 edge.
-- List: sourceHandle = rowId (ex: "row_1"). Cada row DEVE ter exatamente 1 edge.
-- Condition: sourceHandle = id da condicao (ex: "cond_1") OU "else". SEMPRE inclua edge para "else".
-
-IMPORTANTE: Todo no (exceto "end") DEVE ter pelo menos 1 edge saindo dele. Todo caminho DEVE terminar em um no "end".
-
-=============================================
-PADROES DE BOTS COMUNS
-=============================================
-
-A) BOT DE ATENDIMENTO COM MENU:
-   start → send_message(boas-vindas) → buttons(menu) → [ramo por opcao] → cada ramo com fluxo proprio → end
-
-B) COLETA DE DADOS:
-   start → ask_question(nome) → ask_question(email) → ask_question(telefone) → send_message(resumo com {{variaveis}}) → buttons(confirmar?) → [sim: end] [nao: volta ao inicio]
-
-C) FAQ COM IA:
-   start → send_message(apresentacao) → ai_response(responder pergunta) → buttons(ajudou?) → [sim: end(despedida)] [nao: end(transferir humano)]
-
-D) AGENDAMENTO:
-   start → send_message(boas-vindas) → ask_question(servico) → ask_question(data) → ask_question(horario) → send_message(resumo) → buttons(confirmar) → [sim: http_request(agendar) → send_message(confirmacao) → end] [nao: end]
-
-E) PESQUISA DE SATISFACAO:
-   start → send_message(introducao) → buttons(nota 1-5 ou NPS) → condition(nota boa?) → [sim: ask_question(o que gostou) → end] [nao: ask_question(o que melhorar) → end(transferir)]
-
-=============================================
-BOAS PRATICAS
-=============================================
-
-1. Mensagens devem ser curtas (max 2-3 linhas por send_message)
-2. Use delays de 1500-2000ms entre mensagens consecutivas para parecer humano
-3. Sempre colete o nome do cliente logo no inicio e use {{cliente_nome}} nas mensagens seguintes
-4. Sempre tenha um caminho de fallback/else nas condicoes
-5. Oferecer opcao de falar com humano em pontos criticos
-6. Usar emojis com moderacao para deixar mais amigavel (1-2 por mensagem max)
-7. Cada caminho DEVE terminar em um no "end"
-8. Incluir mensagem de despedida educada no no "end"
-9. Textos em portugues do Brasil, tom profissional mas amigavel
-10. Variáveis com nomes claros em snake_case: "cliente_nome", "opcao_menu", "nota_satisfacao"
-11. Ao montar menus, usar description para dar mais contexto ao usuario
-
-=============================================
-FORMATO DE SAIDA
-=============================================
-
-Retorne APENAS um JSON valido (sem markdown, sem explicacao):
-{
-  "nodes": [
-    { "id": "node_1", "type": "start", "position": { "x": 0, "y": 0 }, "data": { "label": "Inicio", "welcomeMessage": "..." } }
-  ],
-  "edges": [
-    { "id": "edge_1_2", "source": "node_1", "target": "node_2" }
-  ]
-}
-
-REGRAS DO JSON:
-- IDs de nos: "node_1", "node_2", etc (sequencial)
-- IDs de edges: "edge_X_Y" onde X e Y sao numeros dos nos (ou "edge_X_handle_Y" se tiver sourceHandle)
-- Positions: use { "x": 0, "y": 0 } para todos os nos (o layout sera calculado automaticamente)
-- Cada no DEVE ter "data.label" com um nome descritivo curto
-- NAO omita campos obrigatorios em data
-
-=============================================
-EXEMPLO COMPLETO — Bot de Atendimento
-=============================================
-
-Prompt: "Bot de atendimento de uma loja de roupas com opcoes de ver produtos, rastrear pedido e falar com vendedor"
-
-{
-  "nodes": [
-    { "id": "node_1", "type": "start", "position": { "x": 0, "y": 0 }, "data": { "label": "Inicio", "welcomeMessage": "Bot iniciado" } },
-    { "id": "node_2", "type": "send_message", "position": { "x": 0, "y": 0 }, "data": { "label": "Boas-vindas", "messageType": "text", "message": "Ola! 👋 Bem-vindo(a) a nossa loja! Sou o assistente virtual e estou aqui para te ajudar." } },
-    { "id": "node_3", "type": "ask_question", "position": { "x": 0, "y": 0 }, "data": { "label": "Perguntar nome", "question": "Para comecar, qual e o seu nome?", "variableName": "cliente_nome", "validation": { "type": "none" } } },
-    { "id": "node_4", "type": "delay", "position": { "x": 0, "y": 0 }, "data": { "label": "Pausa", "delayMs": 1500 } },
-    { "id": "node_5", "type": "buttons", "position": { "x": 0, "y": 0 }, "data": { "label": "Menu principal", "title": "Como posso te ajudar, {{cliente_nome}}?", "description": "Escolha uma das opcoes abaixo:", "buttons": [{ "id": "btn_1", "text": "🛍️ Ver produtos" }, { "id": "btn_2", "text": "📦 Rastrear pedido" }, { "id": "btn_3", "text": "👤 Falar com vendedor" }], "variableName": "opcao_menu" } },
-    { "id": "node_6", "type": "send_message", "position": { "x": 0, "y": 0 }, "data": { "label": "Info produtos", "messageType": "text", "message": "Temos diversas colecoes disponiveis! 🎉\\n\\nAcesse nosso catalogo completo em: https://loja.exemplo.com\\n\\nSe precisar de ajuda para escolher, e so me dizer!" } },
-    { "id": "node_7", "type": "ask_question", "position": { "x": 0, "y": 0 }, "data": { "label": "Pedir codigo pedido", "question": "Por favor, me informe o numero do seu pedido para eu rastrear:", "variableName": "numero_pedido", "validation": { "type": "none" } } },
-    { "id": "node_8", "type": "delay", "position": { "x": 0, "y": 0 }, "data": { "label": "Pausa busca", "delayMs": 2000 } },
-    { "id": "node_9", "type": "send_message", "position": { "x": 0, "y": 0 }, "data": { "label": "Info rastreio", "messageType": "text", "message": "📦 Pedido #{{numero_pedido}}\\n\\nEstamos verificando o status do seu pedido. Em breve um atendente ira te enviar as informacoes detalhadas!" } },
-    { "id": "node_10", "type": "send_message", "position": { "x": 0, "y": 0 }, "data": { "label": "Transferir vendedor", "messageType": "text", "message": "Perfeito, {{cliente_nome}}! Vou te transferir para um de nossos vendedores agora. Aguarde um momento, por favor. 😊" } },
-    { "id": "node_11", "type": "buttons", "position": { "x": 0, "y": 0 }, "data": { "label": "Mais alguma coisa?", "title": "Posso ajudar com mais alguma coisa?", "description": "", "buttons": [{ "id": "btn_1", "text": "✅ Sim, voltar ao menu" }, { "id": "btn_2", "text": "👋 Nao, obrigado" }], "variableName": "continuar" } },
-    { "id": "node_12", "type": "end", "position": { "x": 0, "y": 0 }, "data": { "label": "Encerrar", "finalMessage": "Obrigado por entrar em contato, {{cliente_nome}}! Ate a proxima! 😊", "transferToHuman": false } },
-    { "id": "node_13", "type": "end", "position": { "x": 0, "y": 0 }, "data": { "label": "Transferir humano", "finalMessage": "Transferindo para um atendente...", "transferToHuman": true } },
-    { "id": "node_14", "type": "end", "position": { "x": 0, "y": 0 }, "data": { "label": "Encerrar rastreio", "finalMessage": "Qualquer duvida sobre seu pedido, estamos aqui! Ate logo! 📦", "transferToHuman": true } }
-  ],
-  "edges": [
-    { "id": "edge_1_2", "source": "node_1", "target": "node_2" },
-    { "id": "edge_2_3", "source": "node_2", "target": "node_3" },
-    { "id": "edge_3_4", "source": "node_3", "target": "node_4" },
-    { "id": "edge_4_5", "source": "node_4", "target": "node_5" },
-    { "id": "edge_5_btn1_6", "source": "node_5", "target": "node_6", "sourceHandle": "btn_1" },
-    { "id": "edge_5_btn2_7", "source": "node_5", "target": "node_7", "sourceHandle": "btn_2" },
-    { "id": "edge_5_btn3_10", "source": "node_5", "target": "node_10", "sourceHandle": "btn_3" },
-    { "id": "edge_6_11", "source": "node_6", "target": "node_11" },
-    { "id": "edge_7_8", "source": "node_7", "target": "node_8" },
-    { "id": "edge_8_9", "source": "node_8", "target": "node_9" },
-    { "id": "edge_9_14", "source": "node_9", "target": "node_14" },
-    { "id": "edge_10_13", "source": "node_10", "target": "node_13" },
-    { "id": "edge_11_btn1_5", "source": "node_11", "target": "node_5", "sourceHandle": "btn_1" },
-    { "id": "edge_11_btn2_12", "source": "node_11", "target": "node_12", "sourceHandle": "btn_2" }
-  ]
-}
-
-Agora gere um bot completo e profissional com base na descricao do usuario. Seja criativo, detalhado e realista.`
+    return {
+      name: 'bot_definition',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: {
+          nodes: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                type: { type: 'string', enum: [...this.VALID_NODE_TYPES] },
+                position: {
+                  type: 'object',
+                  properties: { x: { type: 'number' }, y: { type: 'number' } },
+                  required: ['x', 'y'],
+                  additionalProperties: false,
+                },
+                data: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string' },
+                    welcomeMessage: ns,
+                    messageType: ns,
+                    message: ns,
+                    question: ns,
+                    variableName: ns,
+                    validation: nullable({
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string' },
+                        value: ns,
+                        errorMessage: ns,
+                      },
+                      required: ['type', 'value', 'errorMessage'],
+                      additionalProperties: false,
+                    }),
+                    title: ns,
+                    description: ns,
+                    buttons: nullable({
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: { id: { type: 'string' }, text: { type: 'string' } },
+                        required: ['id', 'text'],
+                        additionalProperties: false,
+                      },
+                    }),
+                    buttonText: ns,
+                    sections: nullable({
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          title: { type: 'string' },
+                          rows: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: { rowId: { type: 'string' }, title: { type: 'string' }, description: ns },
+                              required: ['rowId', 'title', 'description'],
+                              additionalProperties: false,
+                            },
+                          },
+                        },
+                        required: ['title', 'rows'],
+                        additionalProperties: false,
+                      },
+                    }),
+                    conditions: nullable({
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          label: { type: 'string' },
+                          operator: { type: 'string' },
+                          variable: { type: 'string' },
+                          value: { type: 'string' },
+                        },
+                        required: ['id', 'label', 'operator', 'variable', 'value'],
+                        additionalProperties: false,
+                      },
+                    }),
+                    assignments: nullable({
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: { variable: { type: 'string' }, value: { type: 'string' } },
+                        required: ['variable', 'value'],
+                        additionalProperties: false,
+                      },
+                    }),
+                    method: ns,
+                    url: ns,
+                    headersJson: ns,
+                    body: ns,
+                    responseVariable: ns,
+                    timeout: nn,
+                    delayMs: nn,
+                    systemPrompt: ns,
+                    temperature: nn,
+                    maxTokens: nn,
+                    includeSessionContext: nb,
+                    finalMessage: ns,
+                    transferToHuman: nb,
+                    transferDepartmentId: ns,
+                  },
+                  required: [
+                    'label', 'welcomeMessage', 'messageType', 'message', 'question',
+                    'variableName', 'validation', 'title', 'description', 'buttons',
+                    'buttonText', 'sections', 'conditions', 'assignments', 'method',
+                    'url', 'headersJson', 'body', 'responseVariable', 'timeout',
+                    'delayMs', 'systemPrompt', 'temperature', 'maxTokens',
+                    'includeSessionContext', 'finalMessage', 'transferToHuman',
+                    'transferDepartmentId',
+                  ],
+                  additionalProperties: false,
+                },
+              },
+              required: ['id', 'type', 'position', 'data'],
+              additionalProperties: false,
+            },
+          },
+          edges: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                source: { type: 'string' },
+                target: { type: 'string' },
+                sourceHandle: ns,
+              },
+              required: ['id', 'source', 'target', 'sourceHandle'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['nodes', 'edges'],
+        additionalProperties: false,
+      },
+    }
   }
 
   async generateBot(prompt: string): Promise<{ nodes: any[]; edges: any[] }> {
@@ -857,7 +854,7 @@ Agora gere um bot completo e profissional com base na descricao do usuario. Seja
 
     const systemPrompt = this.buildGenerateBotSystemPrompt()
 
-    const userPrompt = `Descricao do bot desejado:\n\n${prompt}\n\nGere o bot completo em JSON. Seja detalhado: inclua mensagens profissionais, coleta de dados quando relevante, delays entre mensagens, e sempre ofereça opcao de falar com humano.`
+    const userPrompt = `Descricao do bot desejado:\n\n${prompt}\n\nGere o bot completo. Seja detalhado: mensagens profissionais, coleta de dados quando relevante, delays entre mensagens, e opcao de falar com humano.`
 
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -867,15 +864,16 @@ Agora gere um bot completo e profissional com base na descricao do usuario. Seja
           Authorization: `Bearer ${openaiApiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
           temperature: 0.7,
-          max_tokens: 8000,
-          response_format: { type: 'json_object' },
+          max_tokens: 4096,
+          response_format: { type: 'json_schema', json_schema: this.buildBotJsonSchema() },
         }),
+        signal: AbortSignal.timeout(150000),
       })
 
       if (!response.ok) {
@@ -994,6 +992,10 @@ Agora gere um bot completo e profissional com base na descricao do usuario. Seja
           if (!node.data.method) node.data.method = 'GET'
           if (!node.data.url) node.data.url = ''
           if (!node.data.timeout) node.data.timeout = 10000
+          if (node.data.headersJson && typeof node.data.headersJson === 'string') {
+            try { node.data.headers = JSON.parse(node.data.headersJson) } catch { node.data.headers = {} }
+          }
+          delete node.data.headersJson
           break
         case 'delay':
           if (!node.data.delayMs) node.data.delayMs = 2000
@@ -1004,6 +1006,11 @@ Agora gere um bot completo e profissional com base na descricao do usuario. Seja
           if (node.data.maxTokens === undefined) node.data.maxTokens = 300
           if (node.data.includeSessionContext === undefined) node.data.includeSessionContext = true
           break
+      }
+
+      // Limpar campos null vindos do structured output
+      for (const key of Object.keys(node.data)) {
+        if (node.data[key] === null) delete node.data[key]
       }
 
       sanitized.push(node)

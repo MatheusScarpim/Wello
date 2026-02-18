@@ -3,7 +3,12 @@
     "allow": [
       "Bash(git checkout:*)",
       "Bash(npx vite build:*)",
-      "WebFetch(domain:platform.openai.com)"
+      "WebFetch(domain:platform.openai.com)",
+      "Bash(docker info:*)",
+      "Bash(docker build:*)",
+      "Bash(docker push:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(grep:*)"
     ]
   }
 }

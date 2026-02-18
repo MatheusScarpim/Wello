@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client'
 let socket: Socket | null = null
 
 const getBaseUrl = () => {
-  return import.meta.env.VITE_API_URL || ''
+  return window.__ENV__?.VITE_API_URL || import.meta.env.VITE_API_URL || ''
 }
 
 export const connectSocket = (token: string | null) => {
@@ -33,6 +33,10 @@ export const connectSocket = (token: string | null) => {
 
   socket.on('conversation.updated', (payload) => {
     window.dispatchEvent(new CustomEvent('ws:conversation', { detail: payload }))
+  })
+
+  socket.on('pipeline.updated', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:pipeline', { detail: payload }))
   })
 }
 

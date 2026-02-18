@@ -40,9 +40,12 @@ export abstract class BaseBot implements IBot {
   }
 
   /**
-   * Processa uma mensagem do usuário
+   * Processa uma mensagem do usuário.
+   * Auto-executa estágios encadeados que não precisam de input do usuário.
    */
   async processMessage(context: MessageContext): Promise<StageResponse> {
+    const MAX_CHAIN = 25
+
     try {
       // Busca ou cria sessão
       let session = await BotSessionRepository.getActiveSession(
@@ -65,63 +68,111 @@ export abstract class BaseBot implements IBot {
       // Adiciona dados da sessão ao contexto
       context.sessionData = session.sessionData
 
-      // Busca o estágio atual
-      const stage = this.getStage(session.currentStage)
+      let currentStageNum = session.currentStage
+      const collectedMessages: string[] = []
+      let finalResponse: StageResponse = { message: 'Erro interno', endSession: true }
 
-      if (!stage) {
-        throw new Error(`Estágio ${session.currentStage} não encontrado`)
-      }
+      for (let i = 0; i < MAX_CHAIN; i++) {
+        const stage = this.getStage(currentStageNum)
 
-      // Executa hooks e validação
-      if (stage.beforeExecute) {
-        await stage.beforeExecute(context)
-      }
+        if (!stage) {
+          throw new Error(`Estágio ${currentStageNum} não encontrado`)
+        }
 
-      if (stage.validate) {
-        const validation = await stage.validate(context.message, context)
-        if (!validation.isValid) {
-          return {
-            message:
-              validation.error ||
-              'Entrada inválida. Por favor, tente novamente.',
-            skipMessage: false,
+        // Validação só na primeira iteração (input do usuário)
+        if (i === 0) {
+          if (stage.beforeExecute) {
+            await stage.beforeExecute(context)
           }
+
+          if (stage.validate) {
+            const validation = await stage.validate(context.message, context)
+            if (!validation.isValid) {
+              return {
+                message:
+                  validation.error ||
+                  'Entrada inválida. Por favor, tente novamente.',
+                skipMessage: false,
+              }
+            }
+          }
+        }
+
+        // Executa o estágio
+        const response = await stage.execute(context)
+
+        // Atualiza sessão se necessário
+        if (response.updateSessionData) {
+          await BotSessionRepository.mergeSessionData(
+            context.conversationId,
+            response.updateSessionData,
+          )
+          context.sessionData = { ...context.sessionData, ...response.updateSessionData }
+        }
+
+        if (response.nextStage !== undefined) {
+          await BotSessionRepository.updateStage(
+            context.conversationId,
+            response.nextStage,
+          )
+        }
+
+        if (response.endSession) {
+          await BotSessionRepository.endSession(context.conversationId)
+        }
+
+        // Executa hook pós-processamento
+        if (stage.afterExecute) {
+          await stage.afterExecute(context, response)
+        }
+
+        // Analytics (se habilitado)
+        if (this.config.enableAnalytics) {
+          await this.logAnalytics(context, stage.stageNumber, response)
+        }
+
+        // Coleta mensagem de texto se presente e não skipMessage
+        if (response.message && !response.skipMessage) {
+          collectedMessages.push(response.message)
+        }
+
+        // Condições de parada — o estágio precisa de interação do usuário
+        const shouldStop =
+          response.nextStage === undefined ||
+          response.endSession ||
+          response.buttons ||
+          response.list ||
+          response.media ||
+          response.transferToHuman
+
+        if (shouldStop) {
+          finalResponse = response
+          break
+        }
+
+        // Auto-avança para o próximo estágio
+        currentStageNum = response.nextStage!
+      }
+
+      // Monta resposta final com mensagens acumuladas dos estágios anteriores
+      if (collectedMessages.length > 0) {
+        if (finalResponse.message && !finalResponse.skipMessage) {
+          // Resposta final também tem mensagem — ela já está em collectedMessages
+          // (foi adicionada no loop), então usa direto
+          finalResponse._previousMessages = collectedMessages.slice(0, -1)
+          finalResponse.message = collectedMessages[collectedMessages.length - 1]
+        } else if (finalResponse.buttons || finalResponse.list || finalResponse.media) {
+          // Resposta final é interativa — envia textos anteriores separadamente
+          finalResponse._previousMessages = collectedMessages
+        } else {
+          // Sem conteúdo final (skipMessage) — usa mensagens coletadas
+          finalResponse.message = collectedMessages[collectedMessages.length - 1]
+          finalResponse._previousMessages = collectedMessages.slice(0, -1)
+          finalResponse.skipMessage = false
         }
       }
 
-      // Executa o estágio
-      const response = await stage.execute(context)
-
-      // Atualiza sessão se necessário
-      if (response.updateSessionData) {
-        await BotSessionRepository.mergeSessionData(
-          context.conversationId,
-          response.updateSessionData,
-        )
-      }
-
-      if (response.nextStage !== undefined) {
-        await BotSessionRepository.updateStage(
-          context.conversationId,
-          response.nextStage,
-        )
-      }
-
-      if (response.endSession) {
-        await BotSessionRepository.endSession(context.conversationId)
-      }
-
-      // Executa hook pós-processamento
-      if (stage.afterExecute) {
-        await stage.afterExecute(context, response)
-      }
-
-      // Analytics (se habilitado)
-      if (this.config.enableAnalytics) {
-        await this.logAnalytics(context, stage.stageNumber, response)
-      }
-
-      return response
+      return finalResponse
     } catch (error) {
       console.error(
         `❌ Erro ao processar mensagem no bot ${this.config.id}:`,

@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance, type AxiosError } from 'axios'
 import type { ApiResponse, ApiError } from '@/types'
 
-const BASE_URL = import.meta.env.VITE_API_URL || ''
+const BASE_URL = window.__ENV__?.VITE_API_URL || import.meta.env.VITE_API_URL || ''
 
 class ApiClient {
   private instance: AxiosInstance

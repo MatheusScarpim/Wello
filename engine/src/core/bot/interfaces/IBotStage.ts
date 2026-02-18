@@ -75,6 +75,8 @@ export interface StageResponse {
   skipMessage?: boolean
   transferToHuman?: boolean
   transferDepartmentId?: string
+  /** Mensagens coletadas de estágios auto-executados antes da resposta final */
+  _previousMessages?: string[]
 }
 
 /**

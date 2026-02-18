@@ -16,6 +16,7 @@ import { BotSessionRepository } from './repositories/BotSessionRepository'
 import WhatsAppManager, { IncomingMessage } from './whatsapp/WhatsAppManager'
 import WhatsAppMultiManager from './whatsapp/WhatsAppMultiManager'
 import fairDistributionService from './fairDistribution/FairDistributionService'
+import appointmentReminderService from './scheduler/AppointmentReminderService'
 
 // Verifica se esta usando modo multi-instancia
 const isMultiInstanceMode = process.env.WHATSAPP_MULTI_INSTANCE === 'true'
@@ -92,6 +93,7 @@ export class Application {
       // 6. Configura limpeza automática
       this.setupCleanupJobs()
       fairDistributionService.start()
+      appointmentReminderService.start()
 
       this.isInitialized = true
       console.log('✅ ScarlatChat inicializado com sucesso!')
@@ -314,6 +316,45 @@ export class Application {
         hasMedia: Boolean(message.mediaUrl),
       })
 
+      // Verifica se é resposta de confirmação de agendamento (antes de qualquer processamento)
+      const messageText = (message.message || '').trim()
+      const confirmReply = await appointmentReminderService.handleConfirmationReply(
+        message.identifier,
+        messageText,
+      )
+      if (confirmReply) {
+        // Salva a mensagem recebida
+        const confirmConvo = await this.conversationService.createConversation({
+          identifier: message.identifier,
+          provider: message.provider,
+          name: message.name,
+          photo: message.photo,
+          sessionName: message._sessionName,
+          instanceName: message._instanceName,
+        })
+        await this.messageService.saveMessage({
+          conversationId: confirmConvo._id.toString(),
+          message: message.message,
+          type: message.type,
+          direction: 'incoming',
+          status: 'sent',
+          messageId: message.idMessage,
+          from: message.identifier,
+          to: message.identifierProvider,
+        })
+
+        // Envia resposta de confirmação
+        await MessagingService.sendMessage({
+          to: message.identifier,
+          provider: message.provider as any,
+          message: confirmReply,
+          type: 'text',
+          sessionName: message._sessionName,
+        })
+        console.log(`✅ Resposta de confirmação de agendamento: ${message.identifier}`)
+        return
+      }
+
       const instanceBotConfig = await this.getInstanceBotConfig(
         message._sessionName,
       )
@@ -354,7 +395,6 @@ export class Application {
         })
 
         // Verifica se a mensagem é um comando para atendimento humano
-        const messageText = (message.message || '').trim()
         if (messageText.toLowerCase() === '#human') {
           console.log(
             `🗣️ Solicitação de atendimento humano para: ${message.identifier}`,
@@ -427,7 +467,20 @@ export class Application {
         // Processa com o bot
         const response = await BotFactory.processMessage(botId, context)
 
-        // Envia resposta (texto, botoes, lista, media)
+        // Envia mensagens intermediárias de estágios auto-executados
+        if (response._previousMessages?.length) {
+          for (const msg of response._previousMessages) {
+            await MessagingService.sendMessage({
+              to: message.identifier,
+              provider: message.provider as any,
+              message: msg,
+              type: 'text',
+              sessionName: message._sessionName,
+            })
+          }
+        }
+
+        // Envia resposta final (texto, botoes, lista, media)
         const hasContent =
           (response.message && !response.skipMessage) ||
           response.buttons ||
@@ -511,7 +564,8 @@ export class Application {
   ): Promise<void> {
     try {
       // Providers que nao suportam interativos (buttons/lists)
-      const supportsInteractive = provider !== 'instagram'
+      // Apenas a API oficial Meta suporta botões/listas interativas
+      const supportsInteractive = provider === 'meta_whatsapp' || provider === 'meta'
 
       // Se tem lista interativa
       if (response.list) {
@@ -610,7 +664,7 @@ export class Application {
   }
 
   /**
-   * Converte botoes interativos em texto formatado (fallback para providers sem suporte)
+   * Converte botões interativos em texto formatado (fallback para providers sem suporte)
    */
   private formatButtonsAsText(buttons: any): string {
     const lines: string[] = []
@@ -622,7 +676,7 @@ export class Application {
         lines.push(`${i + 1}. ${btn.text}`)
       })
       lines.push('')
-      lines.push('_Responda com o numero da opcao desejada._')
+      lines.push('_Responda com o número da opção desejada._')
     }
     if (buttons.footer) lines.push(`\n${buttons.footer}`)
     return lines.join('\n')
@@ -646,7 +700,7 @@ export class Application {
         }
       }
       lines.push('')
-      lines.push('_Responda com o numero da opcao desejada._')
+      lines.push('_Responda com o número da opção desejada._')
     }
     return lines.join('\n')
   }
@@ -820,6 +874,7 @@ export class Application {
 
     try {
       fairDistributionService.stop()
+      appointmentReminderService.stop()
       if (this.messageQueue.length > 0) {
         console.log('Processing pending messages: ' + this.messageQueue.length)
         await this.processMessageQueue()

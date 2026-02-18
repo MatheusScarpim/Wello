@@ -18,6 +18,7 @@ import SetVariableNode from './nodes/SetVariableNode.vue'
 import HttpRequestNode from './nodes/HttpRequestNode.vue'
 import DelayNode from './nodes/DelayNode.vue'
 import AiResponseNode from './nodes/AiResponseNode.vue'
+import AppointmentSchedulingNode from './nodes/AppointmentSchedulingNode.vue'
 import EndNode from './nodes/EndNode.vue'
 import BotBuilderAiAssistant from './BotBuilderAiAssistant.vue'
 
@@ -34,6 +35,7 @@ const nodeTypes = {
   http_request: markRaw(HttpRequestNode),
   delay: markRaw(DelayNode),
   ai_response: markRaw(AiResponseNode),
+  appointment_scheduling: markRaw(AppointmentSchedulingNode),
   end: markRaw(EndNode),
 }
 

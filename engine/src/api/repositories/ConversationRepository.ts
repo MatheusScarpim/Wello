@@ -1,4 +1,4 @@
-import { Document } from 'mongodb'
+import { Document, ObjectId } from 'mongodb'
 
 import { BaseRepository } from '@/core/repositories/BaseRepository'
 
@@ -42,6 +42,8 @@ export interface ConversationDocument extends Document {
   instanceId?: string // ID da instância no MongoDB
   sessionName?: string // Nome da sessão (ex: session_123456_abc)
   instanceName?: string // Nome amigável da instância
+  // Pipeline
+  pipelineStageId?: string
 }
 
 /**
@@ -88,6 +90,43 @@ export class ConversationRepository extends BaseRepository<ConversationDocument>
         unreadCount: { $gt: 0 },
       } as any,
       limit,
+    )
+  }
+
+  /**
+   * Busca conversas por etapa do pipeline
+   */
+  async findByPipelineStage(stageId: string) {
+    return await this.find(
+      { pipelineStageId: stageId, archived: false } as any,
+      { sort: { updatedAt: -1 } } as any,
+    )
+  }
+
+  /**
+   * Atualiza a etapa do pipeline de uma conversa
+   */
+  async updatePipelineStage(conversationId: string, stageId: string | null) {
+    const objectId = ObjectId.isValid(conversationId) ? new ObjectId(conversationId) : conversationId
+    return await this.updateOne(
+      { _id: objectId } as any,
+      { $set: { pipelineStageId: stageId, updatedAt: new Date() } },
+    )
+  }
+
+  /**
+   * Busca conversas sem etapa de pipeline
+   */
+  async findWithoutPipelineStage() {
+    return await this.find(
+      {
+        archived: false,
+        $or: [
+          { pipelineStageId: { $exists: false } },
+          { pipelineStageId: null },
+        ],
+      } as any,
+      { sort: { updatedAt: -1 } } as any,
     )
   }
 }

@@ -101,6 +101,8 @@ export interface Conversation {
   instanceId?: string
   sessionName?: string
   instanceName?: string
+  // Pipeline
+  pipelineStageId?: string
 }
 
 export interface CreateConversationPayload {
@@ -862,4 +864,142 @@ export interface MessageMetrics {
   byDay: MessageDayMetric[]
   byOperator: MessageOperatorMetric[]
   byHour: MessageHourMetric[]
+}
+
+// ============================================
+// PIPELINE / FUNIL DE VENDAS
+// ============================================
+
+export interface PipelineStage {
+  _id: string
+  name: string
+  color: string
+  order: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface PipelineStagePayload {
+  name: string
+  color: string
+  order?: number
+}
+
+export interface PipelineBoardColumn {
+  stage: PipelineStage
+  conversations: Conversation[]
+  total: number
+}
+
+export interface PipelineMetrics {
+  stages: {
+    stageId: string
+    stageName: string
+    stageColor: string
+    count: number
+  }[]
+  totalInPipeline: number
+  totalWithoutStage: number
+}
+
+// ============================================
+// AGENDAMENTOS
+// ============================================
+
+export type AppointmentStatus = 'scheduled' | 'confirmed' | 'cancelled' | 'completed'
+
+export interface Appointment {
+  _id: string
+  contactId?: string
+  contactName?: string
+  contactIdentifier?: string
+  operatorId?: string
+  operatorName?: string
+  professionalId?: string
+  professionalName?: string
+  serviceId?: string
+  serviceName?: string
+  title: string
+  description?: string
+  date: string
+  duration: number
+  status: AppointmentStatus
+  reminderSent: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AppointmentPayload {
+  contactId?: string
+  contactName?: string
+  contactIdentifier?: string
+  operatorId?: string
+  operatorName?: string
+  professionalId?: string
+  professionalName?: string
+  serviceId?: string
+  serviceName?: string
+  title: string
+  description?: string
+  date: string
+  duration?: number
+}
+
+export interface TimeSlot {
+  start: string
+  end: string
+  available: boolean
+}
+
+export interface AvailabilitySettings {
+  _id?: string
+  slotDuration: number
+  schedule: WeekSchedule
+  blockedDates: string[]
+}
+
+// ============================================
+// SERVICOS
+// ============================================
+
+export interface Service {
+  _id: string
+  name: string
+  defaultDuration: number
+  color: string
+  description?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ServicePayload {
+  name: string
+  defaultDuration: number
+  color: string
+  description?: string
+}
+
+// ============================================
+// PROFISSIONAIS
+// ============================================
+
+export interface Professional {
+  _id: string
+  name: string
+  color: string
+  serviceIds: string[]
+  phone?: string
+  email?: string
+  isActive: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ProfessionalPayload {
+  name: string
+  color: string
+  serviceIds?: string[]
+  phone?: string
+  email?: string
+  isActive?: boolean
 }

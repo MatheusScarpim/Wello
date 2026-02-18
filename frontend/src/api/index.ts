@@ -59,6 +59,23 @@ import type {
   MetricsPeriod,
   // Message Metrics types
   MessageMetrics,
+  // Pipeline types
+  PipelineStage,
+  PipelineStagePayload,
+  PipelineBoardColumn,
+  PipelineMetrics,
+  // Appointment types
+  Appointment,
+  AppointmentPayload,
+  AppointmentStatus,
+  TimeSlot,
+  AvailabilitySettings,
+  // Service types
+  Service,
+  ServicePayload,
+  // Professional types
+  Professional,
+  ProfessionalPayload,
 } from '@/types'
 
 // Health & Status
@@ -467,7 +484,7 @@ export const iaApi = {
   listElevenLabsVoices: () =>
     apiClient.get<{ voices: Array<{ voiceId: string; name: string; category: string; previewUrl?: string }> }>('/api/ia/elevenlabs-voices'),
   generateBot: (prompt: string) =>
-    apiClient.post<{ nodes: any[]; edges: any[] }>('/api/ia/generate-bot', { prompt }, { timeout: 60000 }),
+    apiClient.post<{ nodes: any[]; edges: any[] }>('/api/ia/generate-bot', { prompt }, { timeout: 180000 }),
 }
 
 export const visualBotsApi = {
@@ -494,6 +511,94 @@ export const visualBotsApi = {
     apiClient.post<any>(`/api/visual-bots/${id}/duplicate`),
   test: (id: string, message: string, sessionData?: Record<string, any>) =>
     apiClient.post<any>(`/api/visual-bots/${id}/test`, { message, sessionData }),
+}
+
+// ============================================
+// PIPELINE / FUNIL DE VENDAS
+// ============================================
+
+export const pipelineStagesApi = {
+  list: () =>
+    apiClient.get<PipelineStage[]>('/api/pipeline-stages'),
+  create: (payload: PipelineStagePayload) =>
+    apiClient.post<PipelineStage>('/api/pipeline-stages', payload),
+  update: (id: string, payload: Partial<PipelineStagePayload>) =>
+    apiClient.put<PipelineStage>(`/api/pipeline-stages/${id}`, payload),
+  reorder: (stages: { id: string; order: number }[]) =>
+    apiClient.put('/api/pipeline-stages/reorder', { stages }),
+  delete: (id: string) =>
+    apiClient.delete(`/api/pipeline-stages/${id}`),
+}
+
+export const pipelineApi = {
+  getBoard: () =>
+    apiClient.get<PipelineBoardColumn[]>('/api/pipeline/board'),
+  move: (conversationId: string, stageId: string | null) =>
+    apiClient.put('/api/pipeline/move', { conversationId, stageId }),
+  bulkMove: (conversationIds: string[], stageId: string | null) =>
+    apiClient.put('/api/pipeline/bulk-move', { conversationIds, stageId }),
+  getMetrics: () =>
+    apiClient.get<PipelineMetrics>('/api/pipeline/metrics'),
+}
+
+// ============================================
+// AGENDAMENTOS
+// ============================================
+
+export const appointmentsApi = {
+  list: (params?: { date?: string; operatorId?: string; contactIdentifier?: string; status?: string; page?: number; limit?: number }) =>
+    apiClient.get<Appointment[]>('/api/appointments', params as Record<string, unknown>),
+  calendar: (start: string, end: string) =>
+    apiClient.get<Appointment[]>('/api/appointments/calendar', { start, end }),
+  slots: (date: string) =>
+    apiClient.get<TimeSlot[]>(`/api/appointments/slots/${date}`),
+  create: (payload: AppointmentPayload) =>
+    apiClient.post<Appointment>('/api/appointments', payload),
+  update: (id: string, payload: Partial<AppointmentPayload>) =>
+    apiClient.put<Appointment>(`/api/appointments/${id}`, payload),
+  updateStatus: (id: string, status: AppointmentStatus) =>
+    apiClient.patch(`/api/appointments/${id}/status`, { status }),
+  delete: (id: string) =>
+    apiClient.delete(`/api/appointments/${id}`),
+}
+
+export const availabilityApi = {
+  get: () =>
+    apiClient.get<AvailabilitySettings>('/api/availability'),
+  update: (data: Partial<AvailabilitySettings>) =>
+    apiClient.put('/api/availability', data),
+}
+
+// ============================================
+// SERVICOS
+// ============================================
+
+export const servicesApi = {
+  list: () =>
+    apiClient.get<Service[]>('/api/services'),
+  create: (payload: ServicePayload) =>
+    apiClient.post<Service>('/api/services', payload),
+  update: (id: string, payload: Partial<ServicePayload>) =>
+    apiClient.put<Service>(`/api/services/${id}`, payload),
+  delete: (id: string) =>
+    apiClient.delete(`/api/services/${id}`),
+}
+
+// ============================================
+// PROFISSIONAIS
+// ============================================
+
+export const professionalsApi = {
+  list: () =>
+    apiClient.get<Professional[]>('/api/professionals'),
+  listActive: () =>
+    apiClient.get<Professional[]>('/api/professionals/active'),
+  create: (payload: ProfessionalPayload) =>
+    apiClient.post<Professional>('/api/professionals', payload),
+  update: (id: string, payload: Partial<ProfessionalPayload>) =>
+    apiClient.put<Professional>(`/api/professionals/${id}`, payload),
+  delete: (id: string) =>
+    apiClient.delete(`/api/professionals/${id}`),
 }
 
 export { apiClient }
