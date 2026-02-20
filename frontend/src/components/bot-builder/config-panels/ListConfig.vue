@@ -143,6 +143,18 @@ function removeRow(sectionIndex: number, rowIndex: number) {
       />
     </div>
 
+    <!-- Nome da variavel -->
+    <div>
+      <label class="label">Nome da variável (opcional)</label>
+      <input
+        type="text"
+        class="input font-mono"
+        placeholder="resposta_lista"
+        :value="nodeData.variableName"
+        @input="updateField('variableName', ($event.target as HTMLInputElement).value)"
+      />
+    </div>
+
     <!-- Secoes -->
     <div>
       <div class="flex items-center justify-between mb-2">

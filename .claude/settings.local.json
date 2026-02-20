@@ -21,7 +21,9 @@
       "Bash(ls:*)",
       "Bash(test:*)",
       "Bash(pnpm run build:*)",
-      "Bash(node node_modules/.bin/tsc:*)"
+      "Bash(node node_modules/.bin/tsc:*)",
+      "Bash(find:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

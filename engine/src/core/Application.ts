@@ -514,6 +514,27 @@ export class Application {
           message.identifier,
         )
 
+        // Verifica cooldown após transferência para operador
+        if (!session) {
+          const cooldownMinutes = parseInt(
+            process.env.BOT_TRANSFER_COOLDOWN_MINUTES || '10',
+            10,
+          )
+          const transferredSession =
+            await this.botSessionRepository.getLastTransferredSession(
+              message.identifier,
+              cooldownMinutes,
+            )
+
+          if (transferredSession) {
+            console.log(
+              `⏳ Cooldown ativo (${cooldownMinutes}min) após transferência para operador: ${message.identifier}`,
+            )
+            // Mensagem já foi salva acima — fica visível para o operador na fila
+            return
+          }
+        }
+
         // Define qual bot usar
         let botId =
           session?.botId || instanceBotConfig?.botId || this.getDefaultBotId()
@@ -546,6 +567,8 @@ export class Application {
         // Processa com o bot
         const response = await BotFactory.processMessage(botId, context)
 
+        const botConversationId = conversation._id.toString()
+
         // Envia mensagens intermediárias de estágios auto-executados
         if (response._previousMessages?.length) {
           for (const msg of response._previousMessages) {
@@ -555,6 +578,16 @@ export class Application {
               message: msg,
               type: 'text',
               sessionName: message._sessionName,
+            })
+            // Salva mensagem intermediária do bot no banco
+            await this.messageService.saveMessage({
+              conversationId: botConversationId,
+              message: msg,
+              type: 'text',
+              direction: 'outgoing',
+              status: 'sent',
+              from: 'bot',
+              to: message.identifier,
             })
           }
         }
@@ -571,6 +604,27 @@ export class Application {
             message.provider,
             response,
           )
+          // Salva resposta final do bot no banco
+          const botMessageText = response.buttons
+            ? `*${response.buttons.title}*\n${response.buttons.description || ''}`
+            : response.list
+              ? `*${response.list.title}*\n${response.list.description || ''}`
+              : response.media
+                ? response.media.caption || response.message || ''
+                : response.message || ''
+          if (botMessageText) {
+            await this.messageService.saveMessage({
+              conversationId: botConversationId,
+              message: botMessageText,
+              type: response.buttons ? 'text' : response.list ? 'text' : response.media?.type || 'text',
+              direction: 'outgoing',
+              status: 'sent',
+              from: 'bot',
+              to: message.identifier,
+              mediaUrl: response.media?.url,
+              mediaStorage: response.media?.mediaStorage,
+            })
+          }
         }
 
         // Transferencia para atendente humano
@@ -807,6 +861,9 @@ export class Application {
       })
 
       const conversationId = conversation._id.toString()
+
+      // Marca sessão de bot como transferida (para cooldown)
+      await this.botSessionRepository.setTransferredAt(message.identifier)
 
       // Remove operador e coloca na fila
       await this.conversationService.removeOperator(conversationId)

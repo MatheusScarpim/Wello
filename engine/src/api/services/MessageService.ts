@@ -154,13 +154,15 @@ export class MessageService {
       const operatorName =
         conversation?.operatorName || params.operatorName || null
 
+      const finalMessageId = params.messageId || `bot_${crypto.randomUUID()}`
+
       const message = await this.repository.create({
         conversationId: params.conversationId,
         message: params.message,
         type: params.type,
         direction: params.direction,
         status: params.status,
-        messageId: params.messageId,
+        messageId: finalMessageId,
         quotedMessageId: params.quotedMessageId,
         mediaUrl: params.mediaUrl,
         mediaStorage: params.mediaStorage,

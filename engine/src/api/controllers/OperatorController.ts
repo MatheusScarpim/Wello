@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { ObjectId } from 'mongodb'
 
 import conversationRepository from '../repositories/ConversationRepository'
+import departmentRepository from '../repositories/DepartmentRepository'
 import operatorRepository, {
   defaultOperatorSettings,
   IOperator,
@@ -31,6 +32,23 @@ class OperatorController extends BaseController {
       satisfaction: 0,
       todayChats,
     }
+  }
+
+  /**
+   * Sincroniza o operador nos arrays 'operators' dos departamentos
+   */
+  private async syncDepartments(
+    operatorId: string,
+    newDepartmentIds: string[],
+    oldDepartmentIds: string[] = [],
+  ): Promise<void> {
+    const toAdd = newDepartmentIds.filter((id) => !oldDepartmentIds.includes(id))
+    const toRemove = oldDepartmentIds.filter((id) => !newDepartmentIds.includes(id))
+
+    await Promise.all([
+      ...toAdd.map((deptId) => departmentRepository.addOperator(deptId, operatorId)),
+      ...toRemove.map((deptId) => departmentRepository.removeOperator(deptId, operatorId)),
+    ])
   }
 
   /**
@@ -199,6 +217,12 @@ class OperatorController extends BaseController {
       }
 
       const created = await operatorRepository.create(operator)
+
+      // Sincroniza departamentos: adiciona operador nos departamentos selecionados
+      if (created._id && departmentIds?.length) {
+        await this.syncDepartments(created._id.toString(), departmentIds, [])
+      }
+
       const { password: _, ...operatorWithoutPassword } = created
 
       this.sendSuccess(
@@ -243,6 +267,11 @@ class OperatorController extends BaseController {
         delete updates.password
       }
 
+      // Sincroniza departamentos se mudaram
+      if (updates.departmentIds) {
+        await this.syncDepartments(id, updates.departmentIds, existing.departmentIds || [])
+      }
+
       const updated = await operatorRepository.updateOne(
         { _id: new ObjectId(id) },
         {
@@ -284,6 +313,12 @@ class OperatorController extends BaseController {
       if (!ObjectId.isValid(id)) {
         this.sendError(res, 'ID invalido', 400)
         return
+      }
+
+      // Remove operador de todos os departamentos antes de deletar
+      const operatorToDelete = await operatorRepository.findById(id)
+      if (operatorToDelete?.departmentIds?.length) {
+        await this.syncDepartments(id, [], operatorToDelete.departmentIds)
       }
 
       const deleted = await operatorRepository.deleteOne({

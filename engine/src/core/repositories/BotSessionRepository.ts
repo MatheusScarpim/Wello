@@ -11,6 +11,7 @@ export interface BotSession extends Document {
   updatedAt: Date
   expiresAt?: Date
   isActive: boolean
+  transferredAt?: Date
 }
 
 /**
@@ -137,6 +138,33 @@ export class BotSessionRepository extends BaseRepository<BotSession> {
     return await this.deleteMany({
       expiresAt: { $lt: new Date() },
       isActive: false,
+    })
+  }
+
+  /**
+   * Marca sessão como transferida para operador humano
+   */
+  async setTransferredAt(conversationId: string): Promise<boolean> {
+    return await this.updateOne(
+      { conversationId },
+      {
+        $set: { transferredAt: new Date() },
+      },
+    )
+  }
+
+  /**
+   * Busca sessão transferida recentemente (dentro do período de cooldown)
+   */
+  async getLastTransferredSession(
+    conversationId: string,
+    cooldownMinutes: number,
+  ): Promise<BotSession | null> {
+    const cutoff = new Date(Date.now() - cooldownMinutes * 60 * 1000)
+    return await this.findOne({
+      conversationId,
+      isActive: false,
+      transferredAt: { $gte: cutoff },
     })
   }
 

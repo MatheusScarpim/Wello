@@ -251,7 +251,7 @@ export class DynamicStage implements IBotStage {
           : undefined,
         updateSessionData: {
           ...(data.variableName
-            ? { [data.variableName]: selectedRowId || context.message }
+            ? { [data.variableName]: selectedRow?.title || context.message }
             : {}),
           _awaitingInput: null,
         },

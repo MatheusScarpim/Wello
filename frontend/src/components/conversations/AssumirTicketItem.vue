@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Clock, MessageSquare, Tag, User, ChevronRight, Loader2, Smartphone } from 'lucide-vue-next'
+import { Clock, MessageSquare, Tag, User, ChevronRight, Loader2, Smartphone, Eye } from 'lucide-vue-next'
 import type { QueueItem } from '@/types'
 
 const props = defineProps<{
@@ -283,16 +283,25 @@ const canClaim = computed(
           </span>
         </template>
         <template v-else>
-          <!-- Desktop: botao assumir melhorado -->
-          <button
-            @click.stop="emit('claim', item)"
-            :disabled="!canClaim"
-            class="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Loader2 v-if="claiming" class="w-4 h-4 animate-spin" />
-            <MessageSquare v-else class="w-4 h-4" />
-            <span>{{ isOfferedToOther ? 'Reservado' : 'Assumir' }}</span>
-          </button>
+          <!-- Desktop: botoes assumir + visualizar -->
+          <div class="hidden sm:flex items-center gap-2">
+            <button
+              @click.stop="emit('preview', item)"
+              class="flex items-center justify-center w-10 h-10 rounded-xl border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-500 hover:text-primary-600 transition-all duration-200 transform hover:scale-[1.05] active:scale-[0.95]"
+              title="Visualizar conversa"
+            >
+              <Eye class="w-4.5 h-4.5" />
+            </button>
+            <button
+              @click.stop="emit('claim', item)"
+              :disabled="!canClaim"
+              class="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Loader2 v-if="claiming" class="w-4 h-4 animate-spin" />
+              <MessageSquare v-else class="w-4 h-4" />
+              <span>{{ isOfferedToOther ? 'Reservado' : 'Assumir' }}</span>
+            </button>
+          </div>
           <!-- Mobile: indicador de toque melhorado -->
           <div class="sm:hidden flex items-center gap-1 text-primary-500 group-hover:translate-x-1 transition-transform">
             <span class="text-xs font-medium">Ver</span>
