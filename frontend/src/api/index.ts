@@ -76,6 +76,13 @@ import type {
   // Professional types
   Professional,
   ProfessionalPayload,
+  // Google Calendar types
+  GoogleCalendarStatus,
+  GoogleCalendarSyncResult,
+  // WhatsApp Features types
+  ReactionPayload,
+  ForwardPayload,
+  BroadcastPayload,
 } from '@/types'
 
 // Health & Status
@@ -136,6 +143,19 @@ export const whatsappInstancesApi = {
   // Set instance as default
   setDefault: (id: string) =>
     apiClient.post(`/api/whatsapp/instances/${id}/default`),
+  // Transfer conversations between instances
+  transferConversations: (payload: {
+    sourceInstanceId: string
+    targetInstanceId: string
+    filter?: {
+      mode: 'all' | 'by_status'
+      statuses?: string[]
+    }
+  }) =>
+    apiClient.post<{ transferred: number; skipped: number; errors: string[] }>(
+      '/api/whatsapp/instances/transfer-conversations',
+      payload,
+    ),
 }
 
 // Conversations
@@ -182,7 +202,7 @@ export const messagesApi = {
   getById: (id: string) =>
     apiClient.get<Message>(`/api/messages/${id}`),
   send: (payload: SendMessagePayload) =>
-    apiClient.post<{ success: boolean; messageId: string; provider: string }>('/api/messages/send', payload),
+    apiClient.post<{ success: boolean; messageId: string; provider: string }>('/api/messages/send', payload, { timeout: 300000 }),
   markAsRead: (id: string) =>
     apiClient.patch(`/api/messages/${id}/read`),
   getMedia: (id: string) =>
@@ -599,6 +619,127 @@ export const professionalsApi = {
     apiClient.put<Professional>(`/api/professionals/${id}`, payload),
   delete: (id: string) =>
     apiClient.delete(`/api/professionals/${id}`),
+}
+
+// ============================================
+// GOOGLE CALENDAR
+// ============================================
+
+export const googleCalendarApi = {
+  getStatus: () =>
+    apiClient.get<GoogleCalendarStatus>('/api/google-calendar/status'),
+  getAuthUrl: () =>
+    apiClient.get<{ url: string }>('/api/google-calendar/oauth/url'),
+  sync: () =>
+    apiClient.post<GoogleCalendarSyncResult>('/api/google-calendar/sync'),
+  disconnect: () =>
+    apiClient.post('/api/google-calendar/disconnect'),
+  setupWatch: (webhookUrl: string) =>
+    apiClient.post('/api/google-calendar/watch', { webhookUrl }),
+}
+
+// ============================================
+// WHATSAPP FEATURES (WPPConnect Advanced)
+// ============================================
+
+export const whatsappFeaturesApi = {
+  // --- Reactions ---
+  sendReaction: (payload: ReactionPayload) =>
+    apiClient.post('/api/whatsapp/features/reaction', payload),
+
+  // --- Typing ---
+  startTyping: (sessionName: string, chatId: string, duration?: number) =>
+    apiClient.post('/api/whatsapp/features/typing/start', { sessionName, chatId, duration }),
+  stopTyping: (sessionName: string, chatId: string) =>
+    apiClient.post('/api/whatsapp/features/typing/stop', { sessionName, chatId }),
+
+  // --- Messages ---
+  deleteMessage: (sessionName: string, chatId: string, messageId: string, onlyLocal?: boolean) =>
+    apiClient.post('/api/whatsapp/features/message/delete', { sessionName, chatId, messageId, onlyLocal }),
+  editMessage: (sessionName: string, messageId: string, newText: string) =>
+    apiClient.post('/api/whatsapp/features/message/edit', { sessionName, messageId, newText }),
+  forwardMessage: (payload: ForwardPayload) =>
+    apiClient.post('/api/whatsapp/features/message/forward', payload),
+
+  // --- Read status ---
+  sendSeen: (sessionName: string, chatId: string) =>
+    apiClient.post('/api/whatsapp/features/seen', { sessionName, chatId }),
+  markUnread: (sessionName: string, chatId: string) =>
+    apiClient.post('/api/whatsapp/features/unread', { sessionName, chatId }),
+
+  // --- Stickers ---
+  sendSticker: (sessionName: string, to: string, imageBase64: string) =>
+    apiClient.post('/api/whatsapp/features/sticker', { sessionName, to, imageBase64 }),
+  sendStickerGif: (sessionName: string, to: string, imageBase64: string) =>
+    apiClient.post('/api/whatsapp/features/sticker-gif', { sessionName, to, imageBase64 }),
+
+  // --- Star ---
+  starMessage: (sessionName: string, messageId: string, star?: boolean) =>
+    apiClient.post('/api/whatsapp/features/star', { sessionName, messageId, star }),
+
+  // --- Presence ---
+  setOnlinePresence: (sessionName: string, online: boolean) =>
+    apiClient.post('/api/whatsapp/features/presence/online', { sessionName, online }),
+  subscribePresence: (sessionName: string, contactId: string) =>
+    apiClient.post('/api/whatsapp/features/presence/subscribe', { sessionName, contactId }),
+  unsubscribePresence: (sessionName: string, contactId: string) =>
+    apiClient.post('/api/whatsapp/features/presence/unsubscribe', { sessionName, contactId }),
+
+  // --- Status/Stories ---
+  sendImageStatus: (sessionName: string, imageBase64: string, caption?: string) =>
+    apiClient.post('/api/whatsapp/features/status/image', { sessionName, imageBase64, caption }),
+  sendVideoStatus: (sessionName: string, videoBase64: string, caption?: string) =>
+    apiClient.post('/api/whatsapp/features/status/video', { sessionName, videoBase64, caption }),
+  sendTextStatus: (sessionName: string, text: string, backgroundColor?: string, font?: number) =>
+    apiClient.post('/api/whatsapp/features/status/text', { sessionName, text, backgroundColor, font }),
+  sendReadStatus: (sessionName: string, chatId: string, statusId: string) =>
+    apiClient.post('/api/whatsapp/features/status/read', { sessionName, chatId, statusId }),
+
+  // --- Contacts ---
+  blockContact: (sessionName: string, contactId: string) =>
+    apiClient.post('/api/whatsapp/features/contact/block', { sessionName, contactId }),
+  unblockContact: (sessionName: string, contactId: string) =>
+    apiClient.post('/api/whatsapp/features/contact/unblock', { sessionName, contactId }),
+  getContact: (sessionName: string, contactId: string) =>
+    apiClient.get('/api/whatsapp/features/contact/info', { sessionName, contactId }),
+  checkNumberStatus: (sessionName: string, phoneNumber: string) =>
+    apiClient.get('/api/whatsapp/features/contact/check', { sessionName, phoneNumber }),
+  getLastSeen: (sessionName: string, contactId: string) =>
+    apiClient.get('/api/whatsapp/features/contact/last-seen', { sessionName, contactId }),
+  getChatIsOnline: (sessionName: string, contactId: string) =>
+    apiClient.get('/api/whatsapp/features/contact/online', { sessionName, contactId }),
+
+  // --- Chat management ---
+  archiveChat: (sessionName: string, chatId: string, archive: boolean) =>
+    apiClient.post('/api/whatsapp/features/chat/archive', { sessionName, chatId, archive }),
+  pinChat: (sessionName: string, chatId: string, pin: boolean) =>
+    apiClient.post('/api/whatsapp/features/chat/pin', { sessionName, chatId, pin }),
+  deleteChat: (sessionName: string, chatId: string) =>
+    apiClient.delete(`/api/whatsapp/features/chat/${chatId}`, { sessionName }),
+  clearChat: (sessionName: string, chatId: string, keepStarred?: boolean) =>
+    apiClient.post('/api/whatsapp/features/chat/clear', { sessionName, chatId, keepStarred }),
+  setDisappearing: (sessionName: string, chatId: string, enabled: boolean) =>
+    apiClient.post('/api/whatsapp/features/chat/disappearing', { sessionName, chatId, enabled }),
+  muteContact: (sessionName: string, contactId: string, time: number, type: string) =>
+    apiClient.post('/api/whatsapp/features/contact/mute', { sessionName, contactId, time, type }),
+
+  // --- Profile ---
+  setProfileName: (sessionName: string, name: string) =>
+    apiClient.post('/api/whatsapp/features/profile/name', { sessionName, name }),
+  setProfilePic: (sessionName: string, imageBase64: string) =>
+    apiClient.post('/api/whatsapp/features/profile/pic', { sessionName, imageBase64 }),
+  setProfileStatus: (sessionName: string, status: string) =>
+    apiClient.post('/api/whatsapp/features/profile/status', { sessionName, status }),
+  removeProfilePic: (sessionName: string) =>
+    apiClient.post('/api/whatsapp/features/profile/pic/remove', { sessionName }),
+
+  // --- Device info ---
+  getDeviceInfo: (sessionName: string) =>
+    apiClient.get('/api/whatsapp/features/device/info', { sessionName }),
+
+  // --- Broadcast ---
+  sendBroadcast: (payload: BroadcastPayload) =>
+    apiClient.post('/api/whatsapp/features/broadcast', payload),
 }
 
 export { apiClient }

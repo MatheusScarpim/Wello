@@ -158,6 +158,7 @@ export interface ContactConversationCheck {
 // Message
 export interface Message {
   _id: string
+  messageId?: string // WhatsApp native message ID (e.g. true_55xx@c.us_3EB0...)
   conversationId?: string
   identifier?: string
   provider?: string
@@ -175,6 +176,7 @@ export interface Message {
   quotedMessageId?: string
   quotedMsg?: QuotedMessage
   isNote?: boolean
+  reactions?: Array<{ emoji: string; sender: string; timestamp: number }>
 }
 
 // Mensagem citada (reply)
@@ -186,7 +188,7 @@ export interface QuotedMessage {
   mediaUrl?: string
 }
 
-export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 'list' | 'buttons' | 'location' | 'contact' | 'ptt' | 'system' | 'sticker' | 'chat' | 'note'
+export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 'list' | 'buttons' | 'location' | 'contact' | 'ptt' | 'system' | 'sticker' | 'sticker_gif' | 'poll' | 'reaction' | 'chat' | 'note'
 
 export interface SendMessagePayload {
   to: string
@@ -233,6 +235,77 @@ export interface ListRow {
 export interface MessageButton {
   id: string
   text: string
+}
+
+// WhatsApp Features
+export interface ReactionPayload {
+  sessionName: string
+  messageId: string
+  emoji: string
+}
+
+export interface PollPayload {
+  sessionName: string
+  chatId: string
+  name: string
+  choices: string[]
+  selectableCount?: number
+}
+
+export interface PollVote {
+  oderId: string
+  selectedOptions: string[]
+  timestamp: number
+  sender: string
+}
+
+export interface MessageReaction {
+  messageId: string
+  emoji: string
+  sender: string
+  timestamp: number
+}
+
+export interface ForwardPayload {
+  sessionName: string
+  messageId: string
+  toChatId: string
+}
+
+export interface MessageAck {
+  messageId: string
+  ack: number // 0=pending, 1=sent, 2=received, 3=read, 4=played
+  sender?: string
+}
+
+export interface TypingIndicator {
+  chatId: string
+  sessionName: string
+  isTyping: boolean
+  contact?: string
+}
+
+export interface IncomingCallPayload {
+  sessionName: string
+  callId: string
+  from: string
+  isVideo: boolean
+  isGroup: boolean
+}
+
+export interface PresencePayload {
+  chatId: string
+  isOnline: boolean
+  lastSeen?: number
+}
+
+export interface BroadcastPayload {
+  sessionName: string
+  recipients: string[]
+  message: string
+  type?: MessageType
+  mediaBase64?: string
+  caption?: string
 }
 
 // Bot
@@ -925,8 +998,25 @@ export interface Appointment {
   duration: number
   status: AppointmentStatus
   reminderSent: boolean
+  googleCalendarEventId?: string
+  syncSource?: 'local' | 'google'
+  lastSyncedAt?: string
   createdAt?: string
   updatedAt?: string
+}
+
+export interface GoogleCalendarStatus {
+  enabled: boolean
+  connected: boolean
+  calendarId?: string
+  lastSyncAt?: string
+  watchExpiration?: string
+}
+
+export interface GoogleCalendarSyncResult {
+  created: number
+  updated: number
+  deleted: number
 }
 
 export interface AppointmentPayload {

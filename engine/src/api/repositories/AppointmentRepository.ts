@@ -18,6 +18,9 @@ export interface AppointmentDocument extends Document {
   duration: number
   status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed'
   reminderSent: boolean
+  googleCalendarEventId?: string
+  syncSource?: 'local' | 'google'
+  lastSyncedAt?: Date
   createdAt: Date
   updatedAt: Date
 }
@@ -100,6 +103,10 @@ export class AppointmentRepository extends BaseRepository<AppointmentDocument> {
       } as any,
       { sort: { date: 1 } } as any,
     )
+  }
+
+  async findByGoogleEventId(googleCalendarEventId: string): Promise<AppointmentDocument | null> {
+    return await this.findOne({ googleCalendarEventId } as any)
   }
 }
 

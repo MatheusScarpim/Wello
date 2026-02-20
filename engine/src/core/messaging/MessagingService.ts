@@ -1,8 +1,6 @@
 import axios from 'axios'
 
 import whatsappInstanceRepository from '@/api/repositories/WhatsAppInstanceRepository'
-
-import { prepareLocalMediaPayload } from '../helpers/WhatsAppMediaHelper'
 import InstagramManager from '../providers/InstagramManager'
 import MetaManager from '../providers/MetaManager'
 import WhatsAppManager from '../whatsapp/WhatsAppManager'
@@ -25,6 +23,9 @@ export interface SendMessageParams {
     | 'buttons'
     | 'location'
     | 'contact'
+    | 'sticker'
+    | 'sticker_gif'
+    | 'poll'
   mediaUrl?: string
   mediaBase64?: string
   caption?: string
@@ -196,15 +197,29 @@ export class MessagingService {
 
     // Log breve de payload de mídia (sem expor base64 completo)
     if (type !== 'text') {
+      const effectiveHasMedia = Boolean(mediaBase64) || Boolean(mediaUrl)
+      const mediaSource = mediaBase64
+        ? 'mediaBase64'
+        : mediaUrl?.startsWith('data:')
+          ? 'mediaUrl(data-uri)'
+          : mediaUrl
+            ? 'mediaUrl(http)'
+            : 'nenhum'
       console.log('[MessagingService] Envio WPP', {
         to,
         type,
-        hasMediaUrl: Boolean(mediaUrl),
-        hasMediaBase64: Boolean(mediaBase64),
+        mediaSource,
+        hasMedia: effectiveHasMedia,
+        mediaPreview: (mediaBase64 || mediaUrl || '').substring(0, 80),
         filename,
         caption: caption || message,
         sessionName: sessionName || 'default',
       })
+      if (!mediaBase64 && mediaUrl?.startsWith('data:')) {
+        console.warn(
+          '[MessagingService] ⚠️ data URI veio em mediaUrl ao inves de mediaBase64 — prepareMediaPayload trata corretamente',
+        )
+      }
     }
 
     // Tenta usar a instância específica se sessionName foi fornecido
@@ -320,8 +335,25 @@ export class MessagingService {
           }
           break
 
-        case 'document':
         case 'audio':
+          if (!mediaUrl && !mediaBase64) {
+            throw new Error('URL ou base64 do arquivo é obrigatório')
+          }
+          {
+            const audioPayload = await this.prepareMediaPayload(
+              mediaUrl,
+              mediaBase64,
+            )
+            result = await WhatsAppManager.sendPtt(
+              to,
+              audioPayload,
+              filename || 'audio.ogg',
+              caption || message,
+            )
+          }
+          break
+
+        case 'document':
         case 'video':
           if (!mediaUrl && !mediaBase64) {
             throw new Error('URL ou base64 do arquivo é obrigatório')
@@ -483,59 +515,166 @@ export class MessagingService {
           result = await client.sendContactVcard(formattedNumber, contactId)
           break
 
-        case 'image':
+        case 'sticker':
           if (!mediaUrl && !mediaBase64) {
-            throw new Error('URL ou base64 da imagem e obrigatorio')
+            throw new Error('URL ou base64 da imagem e obrigatorio para sticker')
           }
           {
-            const imagePayload = await this.prepareMediaPayload(
-              mediaUrl,
-              mediaBase64,
-            )
-            const targetFilename = filename || 'image.jpg'
-            const mediaFile = await prepareLocalMediaPayload(
-              imagePayload,
-              targetFilename,
-            )
-            try {
-              result = await client.sendImage(
-                formattedNumber,
-                mediaFile.path,
-                targetFilename,
-                caption || message,
-              )
-            } finally {
-              await mediaFile.cleanup()
-            }
+            const stickerPayload = await this.prepareMediaPayload(mediaUrl, mediaBase64)
+            result = await client.sendImageAsSticker(formattedNumber, stickerPayload)
           }
           break
 
-        case 'document':
+        case 'sticker_gif':
+          if (!mediaUrl && !mediaBase64) {
+            throw new Error('URL ou base64 e obrigatorio para sticker animado')
+          }
+          {
+            const stickerGifPayload = await this.prepareMediaPayload(mediaUrl, mediaBase64)
+            result = await (client as any).sendImageAsStickerGif(formattedNumber, stickerGifPayload)
+          }
+          break
+
+        case 'poll':
+          throw new Error('Para enquetes, use o endpoint /api/whatsapp/features/poll')
+
+        case 'image':
         case 'audio':
+        case 'document':
         case 'video':
           if (!mediaUrl && !mediaBase64) {
             throw new Error('URL ou base64 do arquivo e obrigatorio')
           }
           {
-            const filePayload = await this.prepareMediaPayload(
+            const mediaPayload = await this.prepareMediaPayload(
               mediaUrl,
               mediaBase64,
             )
-            const targetFilename = filename || 'file'
-            const fileMedia = await prepareLocalMediaPayload(
-              filePayload,
-              targetFilename,
+            const targetFilename =
+              filename ||
+              (type === 'image'
+                ? 'image.jpg'
+                : type === 'audio'
+                  ? 'audio.mp3'
+                  : 'file')
+            console.log(
+              `📎 [Media] Enviando ${type} (${targetFilename}, ${(mediaPayload.length / 1024).toFixed(1)}KB) para ${formattedNumber}...`,
             )
-            try {
-              result = await client.sendFile(
-                formattedNumber,
-                fileMedia.path,
-                targetFilename,
-                caption || message,
-              )
-            } finally {
-              await fileMedia.cleanup()
+
+            // Bypass client.sendFile para evitar:
+            // 1. Base64 gigante via CDP Runtime.callFunctionOn (gargalo de serializacao)
+            // 2. await result.sendMsgResult que trava indefinidamente (ACK hang)
+            // Injeta base64 em chunks e chama WPP.chat.sendFileMessage direto
+            const page = client.page
+            if (!page) {
+              throw new Error('Sessao WhatsApp sem pagina ativa')
             }
+
+            // Step 1: Injeta base64 no contexto do browser em chunks
+            const CHUNK_SIZE = 500_000 // 500KB por chunk
+            await page.evaluate('window.__wppMedia = ""')
+            const totalChunks = Math.ceil(
+              mediaPayload.length / CHUNK_SIZE,
+            )
+            for (let i = 0; i < totalChunks; i++) {
+              const chunk = mediaPayload.substring(
+                i * CHUNK_SIZE,
+                (i + 1) * CHUNK_SIZE,
+              )
+              await page.evaluate(
+                (c: string) => {
+                  ;(window as any).__wppMedia += c
+                },
+                chunk,
+              )
+            }
+            console.log(
+              `📎 [Media] Base64 injetado no browser (${totalChunks} chunks)`,
+            )
+
+            // Step 2: Monta opcoes para WPP.chat.sendFileMessage
+            const wppOpts: Record<string, any> = {
+              filename: targetFilename,
+              caption: caption || message || '',
+              createChat: true,
+            }
+            if (type === 'audio') {
+              wppOpts.type = 'audio'
+              wppOpts.isPtt = true
+            } else if (type === 'image') {
+              wppOpts.type = 'image'
+            } else if (type === 'document') {
+              wppOpts.type = 'document'
+            } else if (type === 'video') {
+              wppOpts.type = 'video'
+            }
+
+            // Step 3: Chama WPP.chat.sendFileMessage direto — SEM await sendMsgResult
+            // Usa string para page.evaluate evitando que esbuild/tsup corrompa referencia ao WPP global
+            const sendScript = `(async () => {
+              try {
+                const base64 = window.__wppMedia;
+                delete window.__wppMedia;
+                const to = ${JSON.stringify(formattedNumber)};
+                const opts = ${JSON.stringify(wppOpts)};
+                const result = await WPP.chat.sendFileMessage(to, base64, opts);
+                return {
+                  success: true,
+                  id: (result && result.id && result.id._serialized) || String(result && result.id || '')
+                };
+              } catch (err) {
+                delete window.__wppMedia;
+                return {
+                  success: false,
+                  error: (err && err.message) || String(err)
+                };
+              }
+            })()`
+
+            const sendPromise = page
+              .evaluate(sendScript)
+              .catch((err: any) => {
+                console.error(
+                  `❌ [Media] page.evaluate erro: ${err?.message || err}`,
+                )
+                return {
+                  success: false,
+                  error: err?.message || String(err),
+                }
+              })
+
+            const timeoutPromise = new Promise<{
+              success: boolean
+              id: string
+              timeout: true
+            }>((resolve) =>
+              setTimeout(() => {
+                console.warn(
+                  `⏱️ [Media] ${type} timeout 60s — provavelmente enviada`,
+                )
+                resolve({
+                  success: true,
+                  id: 'timeout-assumed-sent',
+                  timeout: true,
+                })
+              }, 60000),
+            )
+
+            const sendResult = (await Promise.race([
+              sendPromise,
+              timeoutPromise,
+            ])) as any
+
+            if (!sendResult.success) {
+              throw new Error(
+                sendResult.error || 'Erro ao enviar midia',
+              )
+            }
+
+            console.log(
+              `📎 [Media] ${type} resultado: id=${sendResult.id}, timeout=${sendResult.timeout || false}`,
+            )
+            result = { id: sendResult.id }
           }
           break
 

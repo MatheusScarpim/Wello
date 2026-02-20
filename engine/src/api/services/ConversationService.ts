@@ -17,6 +17,21 @@ import finalizationService from './FinalizationService'
 import { webhookDispatcher } from './WebhookDispatcher'
 import fairDistributionService from '@/core/fairDistribution/FairDistributionService'
 
+export interface TransferConversationsParams {
+  sourceInstanceId: string
+  targetInstanceId: string
+  filter?: {
+    mode: 'all' | 'by_status'
+    statuses?: string[]
+  }
+}
+
+export interface TransferConversationsResult {
+  transferred: number
+  skipped: number
+  errors: string[]
+}
+
 export interface CreateConversationParams {
   identifier: string
   provider: string
@@ -1104,6 +1119,92 @@ export class ConversationService {
       withOperator,
       withoutOperator: total - withOperator,
     }
+  }
+
+  async transferConversationsToInstance(
+    params: TransferConversationsParams,
+  ): Promise<TransferConversationsResult> {
+    const { sourceInstanceId, targetInstanceId, filter } = params
+    const result: TransferConversationsResult = {
+      transferred: 0,
+      skipped: 0,
+      errors: [],
+    }
+
+    // Validar instância de origem
+    const sourceInstance =
+      await this.whatsappInstanceRepository.findById(sourceInstanceId)
+    if (!sourceInstance) {
+      throw new Error('Instância de origem não encontrada')
+    }
+
+    // Validar instância de destino
+    const targetInstance =
+      await this.whatsappInstanceRepository.findById(targetInstanceId)
+    if (!targetInstance) {
+      throw new Error('Instância de destino não encontrada')
+    }
+
+    // Montar filtro de busca
+    const query: Record<string, any> = {
+      sessionName: sourceInstance.sessionName,
+      archived: false,
+      status: { $ne: 'finalized' },
+    }
+
+    if (filter?.mode === 'by_status' && filter.statuses?.length) {
+      query.status = { $in: filter.statuses }
+    }
+
+    // Buscar conversas da instância de origem
+    const conversations = await this.repository.find(query)
+
+    if (conversations.length === 0) {
+      return result
+    }
+
+    // Atualizar cada conversa
+    for (const conv of conversations) {
+      try {
+        const convId = conv._id?.toString()
+        if (!convId) continue
+
+        await this.repository.updateOne(
+          { _id: new ObjectId(convId) } as any,
+          {
+            $set: {
+              instanceId: targetInstance._id?.toString(),
+              sessionName: targetInstance.sessionName,
+              instanceName: targetInstance.name,
+              updatedAt: new Date(),
+            },
+          },
+        )
+
+        result.transferred++
+
+        // Emitir evento de atualização via socket
+        setImmediate(() => {
+          SocketServer.emitConversationUpdate(
+            {
+              conversationId: convId,
+              instanceId: targetInstance._id?.toString(),
+              sessionName: targetInstance.sessionName,
+              instanceName: targetInstance.name,
+            },
+            convId,
+            conv.operatorId ?? undefined,
+          )
+        })
+      } catch (err: any) {
+        result.skipped++
+        result.errors.push(
+          `Conversa ${conv._id}: ${err.message || 'Erro desconhecido'}`,
+        )
+      }
+    }
+
+    return result
   }
 
   private async buildProtocolNumber(): Promise<string> {

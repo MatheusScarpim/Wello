@@ -30,8 +30,17 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   'application/pdf': '.pdf',
 }
 
-// Tipos de áudio que precisam ser convertidos para ogg (WhatsApp)
-const AUDIO_TYPES_TO_CONVERT = ['audio/webm', 'audio/mp4', 'audio/x-m4a']
+// Tipos de áudio que precisam ser convertidos para ogg/opus (WhatsApp PTT)
+const AUDIO_TYPES_TO_CONVERT = [
+  'audio/webm',
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/m4a',
+  'audio/aac',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/wave',
+]
 
 const NOOP = async () => {}
 
@@ -77,8 +86,10 @@ export async function prepareLocalMediaPayload(
   await fs.writeFile(tempFilePath, Buffer.from(base64Data, 'base64'))
 
   // Verifica se precisa converter áudio para ogg
-  const needsConversion = AUDIO_TYPES_TO_CONVERT.includes(
-    contentType.toLowerCase(),
+  // Usa startsWith para cobrir variantes com parâmetros (ex: audio/webm;codecs=opus)
+  const lowerType = contentType.toLowerCase().split(';')[0].trim()
+  const needsConversion = AUDIO_TYPES_TO_CONVERT.some(
+    (t) => lowerType === t || lowerType.startsWith(t),
   )
 
   if (needsConversion) {

@@ -1,3 +1,4 @@
+import messageRepository from '@/api/repositories/MessageRepository'
 import operatorRepository from '@/api/repositories/OperatorRepository'
 import whatsappInstanceRepository from '@/api/repositories/WhatsAppInstanceRepository'
 import whitelabelRepository from '@/api/repositories/WhitelabelRepository'
@@ -5,6 +6,7 @@ import setupRoutes from '@/api/routes'
 import HttpServer from '@/api/server/HttpServer'
 import { ConversationService } from '@/api/services/ConversationService'
 import { MessageService } from '@/api/services/MessageService'
+import SocketServer from '@/api/socket/SocketServer'
 import WebhookManager from '@/api/webhooks/WebhookManager'
 import { azureStorageService } from '@/services/AzureStorageService'
 
@@ -17,6 +19,7 @@ import WhatsAppManager, { IncomingMessage } from './whatsapp/WhatsAppManager'
 import WhatsAppMultiManager from './whatsapp/WhatsAppMultiManager'
 import fairDistributionService from './fairDistribution/FairDistributionService'
 import appointmentReminderService from './scheduler/AppointmentReminderService'
+import googleCalendarSyncScheduler from './scheduler/GoogleCalendarSyncScheduler'
 
 // Verifica se esta usando modo multi-instancia
 const isMultiInstanceMode = process.env.WHATSAPP_MULTI_INSTANCE === 'true'
@@ -94,6 +97,7 @@ export class Application {
       this.setupCleanupJobs()
       fairDistributionService.start()
       appointmentReminderService.start()
+      googleCalendarSyncScheduler.start()
 
       this.isInitialized = true
       console.log('✅ ScarlatChat inicializado com sucesso!')
@@ -237,6 +241,7 @@ export class Application {
     WhatsAppMultiManager.on('connected', ({ sessionName }) => {
       console.log(`✅ [Multi] Instancia ${sessionName} conectada`)
       WebhookManager.trigger('connection', { status: 'connected', sessionName })
+      this.emitWhatsAppInstancesToAdmins()
     })
 
     WhatsAppMultiManager.on('disconnected', ({ sessionName }) => {
@@ -245,11 +250,71 @@ export class Application {
         status: 'disconnected',
         sessionName,
       })
+      this.emitWhatsAppInstancesToAdmins()
     })
 
     WhatsAppMultiManager.on('qrcode', ({ sessionName, qrCode }) => {
       console.log(`📱 [Multi] QR Code para ${sessionName}`)
       WebhookManager.trigger('qrcode', { sessionName, qrCode })
+      this.emitWhatsAppInstancesToAdmins()
+    })
+
+    // === Eventos avançados do WhatsApp ===
+
+    WhatsAppMultiManager.on('messageReaction', async (data) => {
+      SocketServer.emitReaction(data, data.chatId || '')
+      WebhookManager.trigger('message.reaction', data)
+      // Persistir reação no banco
+      try {
+        const msgId = data.msgId?._serialized || data.msgId?.id || String(data.msgId || '')
+        const sender = data.sender?._serialized || data.senderId || String(data.sender || '')
+        const emoji = data.reactionText || data.reaction || data.emoji || ''
+        if (msgId) {
+          await messageRepository.addReaction(msgId, {
+            emoji,
+            sender,
+            timestamp: data.timestamp || Date.now(),
+          })
+        }
+      } catch (err) {
+        console.warn('⚠️ Erro ao persistir reação:', err)
+      }
+    })
+
+    WhatsAppMultiManager.on('messageEdit', (data) => {
+      SocketServer.emitMessageUpdate({ type: 'edit', ...data }, data.chat || '')
+      WebhookManager.trigger('message.edit', data)
+    })
+
+    WhatsAppMultiManager.on('messageRevoked', (data) => {
+      SocketServer.emitMessageUpdate({ type: 'revoke', ...data }, data.chatId || '')
+      WebhookManager.trigger('message.revoked', data)
+    })
+
+    WhatsAppMultiManager.on('pollResponse', (data) => {
+      SocketServer.emitPollUpdate(data, data.chatId || '')
+      WebhookManager.trigger('poll.response', data)
+    })
+
+    WhatsAppMultiManager.on('messageAck', (data) => {
+      SocketServer.emitMessageAck(data, data.chatId || '')
+    })
+
+    WhatsAppMultiManager.on('incomingCall', (data) => {
+      SocketServer.emitIncomingCall(data)
+      WebhookManager.trigger('call.incoming', data)
+    })
+
+    WhatsAppMultiManager.on('presenceChanged', (data) => {
+      SocketServer.emitPresenceChange(data)
+    })
+
+    WhatsAppMultiManager.on('participantsChanged', (data) => {
+      WebhookManager.trigger('group.participants', data)
+    })
+
+    WhatsAppMultiManager.on('labelUpdate', (data) => {
+      WebhookManager.trigger('label.update', data)
     })
 
     // Inicializa instancias com autoConnect=true
@@ -261,6 +326,20 @@ export class Application {
     console.log(
       '✅ WhatsApp Multi-Instancia pronto (instancias conectarao em background)',
     )
+  }
+
+  /**
+   * Emite lista atualizada de instancias WhatsApp para admins via WebSocket
+   */
+  private emitWhatsAppInstancesToAdmins(): void {
+    setImmediate(async () => {
+      try {
+        const instances = await WhatsAppMultiManager.listInstances()
+        SocketServer.emitWhatsAppInstanceUpdate({ instances })
+      } catch (err) {
+        console.error('❌ Erro ao emitir status das instancias via socket:', err)
+      }
+    })
   }
 
   /**
@@ -875,6 +954,7 @@ export class Application {
     try {
       fairDistributionService.stop()
       appointmentReminderService.stop()
+      googleCalendarSyncScheduler.stop()
       if (this.messageQueue.length > 0) {
         console.log('Processing pending messages: ' + this.messageQueue.length)
         await this.processMessageQueue()

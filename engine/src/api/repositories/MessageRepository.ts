@@ -5,6 +5,12 @@ import { BaseRepository } from '@/core/repositories/BaseRepository' // Assuming 
 /**
  * Interface para documento de mensagem
  */
+export interface MessageReactionDoc {
+  emoji: string
+  sender: string
+  timestamp: number
+}
+
 export interface MessageDocument extends Document {
   conversationId: string
   message: string
@@ -21,6 +27,7 @@ export interface MessageDocument extends Document {
     size?: number
     originalUrl?: string
   }
+  reactions?: MessageReactionDoc[]
   isRead: boolean
   readAt?: Date
   createdAt: Date
@@ -85,6 +92,36 @@ export class MessageRepository extends BaseRepository<MessageDocument> {
       } as any,
       limit,
     )
+  }
+
+  /**
+   * Adiciona ou atualiza reação em uma mensagem (pelo messageId do WPP)
+   */
+  async addReaction(messageId: string, reaction: MessageReactionDoc) {
+    const collection = await this.getCollection()
+    // Remove reação anterior do mesmo sender, depois adiciona a nova
+    await collection.updateOne(
+      { messageId } as any,
+      {
+        $pull: { reactions: { sender: reaction.sender } } as any,
+      },
+    )
+    // Se emoji vazio/false, só remove (unreact)
+    if (reaction.emoji && reaction.emoji !== '') {
+      await collection.updateOne(
+        { messageId } as any,
+        {
+          $push: { reactions: reaction } as any,
+        },
+      )
+    }
+  }
+
+  /**
+   * Busca mensagem pelo messageId do WPP
+   */
+  async findByMessageId(messageId: string) {
+    return await this.findOne({ messageId } as any)
   }
 }
 

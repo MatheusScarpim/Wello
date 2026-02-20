@@ -38,6 +38,43 @@ export const connectSocket = (token: string | null) => {
   socket.on('pipeline.updated', (payload) => {
     window.dispatchEvent(new CustomEvent('ws:pipeline', { detail: payload }))
   })
+
+  socket.on('whatsapp.instances.updated', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:whatsapp-instances', { detail: payload }))
+  })
+
+  // WhatsApp Features events
+  socket.on('message.reaction', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:message-reaction', { detail: payload }))
+  })
+
+  socket.on('message.edited', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:message-edited', { detail: payload }))
+  })
+
+  socket.on('message.deleted', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:message-deleted', { detail: payload }))
+  })
+
+  socket.on('message.ack', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:message-ack', { detail: payload }))
+  })
+
+  socket.on('typing.indicator', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:typing-indicator', { detail: payload }))
+  })
+
+  socket.on('poll.response', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:poll-response', { detail: payload }))
+  })
+
+  socket.on('call.incoming', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:call-incoming', { detail: payload }))
+  })
+
+  socket.on('presence.changed', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:presence-changed', { detail: payload }))
+  })
 }
 
 export const updateSocketToken = (token: string | null) => {

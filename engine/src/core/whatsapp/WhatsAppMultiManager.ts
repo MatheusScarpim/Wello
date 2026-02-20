@@ -259,6 +259,9 @@ class WhatsAppMultiManager extends EventEmitter {
         waitForLogin: false,
         tokenStore: sessionTokenStore,
         folderNameToken: MULTI_TOKENS_FOLDER,
+        puppeteerOptions: {
+          protocolTimeout: 600000,
+        },
         browserArgs: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -266,8 +269,10 @@ class WhatsAppMultiManager extends EventEmitter {
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--disable-gpu',
           '--single-process',
+          '--disable-gpu',
+          '--disable-extensions',
+          '--mute-audio',
           `--user-data-dir=${userDataDir}`,
         ],
         catchQR: (base64Qr, _asciiQR, attempt) => {
@@ -690,6 +695,89 @@ class WhatsAppMultiManager extends EventEmitter {
         console.error(`[${config.name}] Erro ao processar mensagem:`, error)
       }
     })
+
+    // === Event listeners para funcionalidades avançadas ===
+
+    // Reações a mensagens
+    try {
+      ;(client as any).onReactionMessage((data: any) => {
+        this.emit('messageReaction', { sessionName, ...data })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onReactionMessage não disponível`)
+    }
+
+    // Edição de mensagens
+    try {
+      ;(client as any).onMessageEdit((chat: any, id: any, msg: any) => {
+        this.emit('messageEdit', { sessionName, chat, messageId: id, message: msg })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onMessageEdit não disponível`)
+    }
+
+    // Exclusão de mensagens (revogar)
+    try {
+      ;(client as any).onRevokedMessage((data: any) => {
+        this.emit('messageRevoked', { sessionName, ...data })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onRevokedMessage não disponível`)
+    }
+
+    // Respostas de enquetes
+    try {
+      ;(client as any).onPollResponse((data: any) => {
+        this.emit('pollResponse', { sessionName, ...data })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onPollResponse não disponível`)
+    }
+
+    // Status de entrega/leitura (ACK)
+    try {
+      client.onAck((ack: any) => {
+        this.emit('messageAck', { sessionName, ...ack })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onAck não disponível`)
+    }
+
+    // Chamadas recebidas
+    try {
+      ;(client as any).onIncomingCall((call: any) => {
+        this.emit('incomingCall', { sessionName, ...call })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onIncomingCall não disponível`)
+    }
+
+    // Mudanças de presença (online/offline/digitando)
+    try {
+      ;(client as any).onPresenceChanged((data: any) => {
+        this.emit('presenceChanged', { sessionName, ...data })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onPresenceChanged não disponível`)
+    }
+
+    // Mudanças de participantes em grupos
+    try {
+      ;(client as any).onParticipantsChanged((data: any) => {
+        this.emit('participantsChanged', { sessionName, ...data })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onParticipantsChanged não disponível`)
+    }
+
+    // Atualizações de labels
+    try {
+      ;(client as any).onUpdateLabel((data: any) => {
+        this.emit('labelUpdate', { sessionName, ...data })
+      })
+    } catch (e) {
+      console.warn(`⚠️ [${config.name}] onUpdateLabel não disponível`)
+    }
   }
 
   /**

@@ -1,30 +1,38 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { whatsappApi, authApi } from '@/api'
+import { whatsappInstancesApi, authApi, googleCalendarApi } from '@/api'
 import {
   Settings,
   Wifi,
   WifiOff,
   RefreshCw,
-  Power,
+  ExternalLink,
   Key,
   Shield,
   Server,
   Copy,
-  Check
+  Check,
+  Calendar,
+  Unplug
 } from 'lucide-vue-next'
 import { useToast } from 'vue-toastification'
-import type { WhatsAppStatus } from '@/types'
+import type { WhatsAppInstancesStatus, WhatsAppInstance, GoogleCalendarStatus } from '@/types'
 
+const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
 
-const whatsappStatus = ref<WhatsAppStatus | null>(null)
-const isReconnecting = ref(false)
-const isDisconnecting = ref(false)
+const whatsappStatus = ref<WhatsAppInstancesStatus | null>(null)
 const authInfo = ref<any>(null)
 const copied = ref(false)
+
+// Google Calendar
+const gcalStatus = ref<GoogleCalendarStatus | null>(null)
+const isSyncingGcal = ref(false)
+const isDisconnectingGcal = ref(false)
 
 // Token generation form
 const tokenForm = ref({
@@ -38,7 +46,7 @@ const isGenerating = ref(false)
 
 async function fetchWhatsAppStatus() {
   try {
-    const response = await whatsappApi.getStatus()
+    const response = await whatsappInstancesApi.getStatus()
     if (response.data) {
       whatsappStatus.value = response.data
     }
@@ -47,29 +55,18 @@ async function fetchWhatsAppStatus() {
   }
 }
 
-async function reconnectWhatsApp() {
-  isReconnecting.value = true
-  try {
-    await whatsappApi.reconnect()
-    toast.success('Reconexão iniciada')
-    setTimeout(fetchWhatsAppStatus, 2000)
-  } catch {
-    toast.error('Erro ao reconectar')
-  } finally {
-    isReconnecting.value = false
-  }
-}
-
-async function disconnectWhatsApp() {
-  isDisconnecting.value = true
-  try {
-    await whatsappApi.disconnect()
-    toast.success('WhatsApp desconectado')
-    await fetchWhatsAppStatus()
-  } catch {
-    toast.error('Erro ao desconectar')
-  } finally {
-    isDisconnecting.value = false
+function handleWhatsAppInstancesUpdate(event: Event) {
+  const customEvent = event as CustomEvent
+  const payload = customEvent.detail
+  if (payload?.instances) {
+    const instancesList = payload.instances as WhatsAppInstance[]
+    const connected = instancesList.filter((i: WhatsAppInstance) => i.connected).length
+    whatsappStatus.value = {
+      total: instancesList.length,
+      connected,
+      disconnected: instancesList.length - connected,
+      instances: instancesList,
+    }
   }
 }
 
@@ -112,9 +109,83 @@ async function copyToken() {
   setTimeout(() => { copied.value = false }, 2000)
 }
 
+// Google Calendar
+async function fetchGoogleCalendarStatus() {
+  try {
+    const response = await googleCalendarApi.getStatus()
+    if (response.data) {
+      gcalStatus.value = response.data
+    }
+  } catch {
+    // Ignore - Google Calendar pode nao estar configurado
+  }
+}
+
+async function connectGoogleCalendar() {
+  try {
+    const response = await googleCalendarApi.getAuthUrl()
+    if (response.data?.url) {
+      window.open(response.data.url, '_self')
+    }
+  } catch {
+    toast.error('Erro ao iniciar conexao com Google Calendar')
+  }
+}
+
+async function syncGoogleCalendar() {
+  isSyncingGcal.value = true
+  try {
+    const response = await googleCalendarApi.sync()
+    const stats = response.data
+    if (stats) {
+      toast.success(`Sincronizado: ${stats.created} criados, ${stats.updated} atualizados, ${stats.deleted} removidos`)
+    } else {
+      toast.success('Sincronizacao concluida')
+    }
+    await fetchGoogleCalendarStatus()
+  } catch {
+    toast.error('Erro ao sincronizar com Google Calendar')
+  } finally {
+    isSyncingGcal.value = false
+  }
+}
+
+async function disconnectGoogleCalendar() {
+  isDisconnectingGcal.value = true
+  try {
+    await googleCalendarApi.disconnect()
+    toast.success('Google Calendar desconectado')
+    await fetchGoogleCalendarStatus()
+  } catch {
+    toast.error('Erro ao desconectar Google Calendar')
+  } finally {
+    isDisconnectingGcal.value = false
+  }
+}
+
+function formatGcalDate(dateStr?: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleString('pt-BR')
+}
+
 onMounted(() => {
   fetchWhatsAppStatus()
   fetchAuthInfo()
+  fetchGoogleCalendarStatus()
+
+  window.addEventListener('ws:whatsapp-instances', handleWhatsAppInstancesUpdate)
+
+  // Handle OAuth callback redirect
+  if (route.query.googleCalendar === 'connected') {
+    toast.success('Google Calendar conectado com sucesso!')
+    router.replace({ query: {} })
+    fetchGoogleCalendarStatus()
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('ws:whatsapp-instances', handleWhatsAppInstancesUpdate)
 })
 </script>
 
@@ -139,47 +210,125 @@ onMounted(() => {
           <div class="flex items-center gap-3">
             <div
               class="w-12 h-12 rounded-xl flex items-center justify-center"
-              :class="whatsappStatus?.connected ? 'bg-green-100' : 'bg-red-100'"
+              :class="(whatsappStatus?.connected ?? 0) > 0 ? 'bg-green-100' : 'bg-red-100'"
             >
               <component
-                :is="whatsappStatus?.connected ? Wifi : WifiOff"
+                :is="(whatsappStatus?.connected ?? 0) > 0 ? Wifi : WifiOff"
                 class="w-6 h-6"
-                :class="whatsappStatus?.connected ? 'text-green-600' : 'text-red-600'"
+                :class="(whatsappStatus?.connected ?? 0) > 0 ? 'text-green-600' : 'text-red-600'"
               />
             </div>
             <div>
               <p class="font-semibold text-gray-900">
-                {{ whatsappStatus?.connected ? 'Conectado' : 'Desconectado' }}
+                {{ (whatsappStatus?.connected ?? 0) > 0
+                  ? `${whatsappStatus!.connected} de ${whatsappStatus!.total} conectado(s)`
+                  : 'Nenhuma instancia conectada' }}
               </p>
               <p class="text-sm text-gray-500">
-                Status: {{ whatsappStatus?.status || 'N/A' }}
+                {{ whatsappStatus?.total || 0 }} instancia(s) configurada(s)
+              </p>
+            </div>
+          </div>
+
+          <router-link to="/whatsapp" class="btn-outline">
+            <ExternalLink class="w-4 h-4" />
+            Gerenciar Instancias
+          </router-link>
+        </div>
+
+        <div v-if="whatsappStatus?.instances?.length" class="space-y-2">
+          <div
+            v-for="inst in whatsappStatus.instances"
+            :key="inst.id"
+            class="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+          >
+            <div class="flex items-center gap-2">
+              <span
+                class="w-2 h-2 rounded-full"
+                :class="inst.connected ? 'bg-green-500' : 'bg-gray-400'"
+              />
+              <span class="text-sm text-gray-700">{{ inst.name }}</span>
+              <span v-if="inst.phoneNumber" class="text-xs text-gray-400">{{ inst.phoneNumber }}</span>
+            </div>
+            <span
+              class="text-xs px-2 py-0.5 rounded-full"
+              :class="inst.connected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
+            >
+              {{ inst.connected ? 'Conectado' : 'Desconectado' }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Google Calendar Section -->
+    <div class="card">
+      <div class="p-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <Calendar class="w-5 h-5 text-blue-600" />
+          Google Calendar
+        </h2>
+      </div>
+      <div class="p-4">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <div
+              class="w-12 h-12 rounded-xl flex items-center justify-center"
+              :class="gcalStatus?.connected ? 'bg-blue-100' : 'bg-gray-100'"
+            >
+              <Calendar
+                class="w-6 h-6"
+                :class="gcalStatus?.connected ? 'text-blue-600' : 'text-gray-400'"
+              />
+            </div>
+            <div>
+              <p class="font-semibold text-gray-900">
+                {{ gcalStatus?.connected ? 'Conectado' : 'Desconectado' }}
+              </p>
+              <p v-if="gcalStatus?.connected && gcalStatus?.lastSyncAt" class="text-sm text-gray-500">
+                Ultima sincronizacao: {{ formatGcalDate(gcalStatus.lastSyncAt) }}
+              </p>
+              <p v-else-if="gcalStatus?.connected" class="text-sm text-gray-500">
+                Calendario: {{ gcalStatus.calendarId || 'primary' }}
+              </p>
+              <p v-else class="text-sm text-gray-500">
+                Sincronize seus agendamentos com o Google Calendar
               </p>
             </div>
           </div>
 
           <div class="flex gap-2">
             <button
-              @click="reconnectWhatsApp"
-              :disabled="isReconnecting"
-              class="btn-outline"
+              v-if="!gcalStatus?.connected && gcalStatus?.enabled"
+              @click="connectGoogleCalendar"
+              class="btn-primary"
             >
-              <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isReconnecting }" />
-              Reconectar
+              <Calendar class="w-4 h-4" />
+              Conectar
             </button>
             <button
-              v-if="whatsappStatus?.connected"
-              @click="disconnectWhatsApp"
-              :disabled="isDisconnecting"
+              v-if="gcalStatus?.connected"
+              @click="syncGoogleCalendar"
+              :disabled="isSyncingGcal"
+              class="btn-outline"
+            >
+              <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isSyncingGcal }" />
+              Sincronizar
+            </button>
+            <button
+              v-if="gcalStatus?.connected"
+              @click="disconnectGoogleCalendar"
+              :disabled="isDisconnectingGcal"
               class="btn-danger"
             >
-              <Power class="w-4 h-4" />
+              <Unplug class="w-4 h-4" />
               Desconectar
             </button>
           </div>
         </div>
 
-        <p class="text-sm text-gray-500">
-          Para conectar o WhatsApp, verifique os logs do servidor para obter o QR Code.
+        <p v-if="!gcalStatus?.enabled" class="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+          Configure as variaveis GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no servidor para habilitar a integracao com o Google Calendar.
         </p>
       </div>
     </div>

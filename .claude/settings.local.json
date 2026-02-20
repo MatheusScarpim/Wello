@@ -8,7 +8,20 @@
       "Bash(docker build:*)",
       "Bash(docker push:*)",
       "Bash(npx vue-tsc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(pnpm install:*)",
+      "Bash(npx pnpm:*)",
+      "Bash(npx pnpm@9 install:*)",
+      "Bash(npx pnpm@8.15.5:*)",
+      "Bash(docker images:*)",
+      "Bash(docker manifest inspect:*)",
+      "Bash(docker pull:*)",
+      "Bash(docker tag:*)",
+      "WebFetch(domain:wppconnect.io)",
+      "Bash(ls:*)",
+      "Bash(test:*)",
+      "Bash(pnpm run build:*)",
+      "Bash(node node_modules/.bin/tsc:*)"
     ]
   }
 }

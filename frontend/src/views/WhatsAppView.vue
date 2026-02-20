@@ -26,7 +26,8 @@ import {
   Edit2,
   X,
   MessageSquare,
-  Save
+  Save,
+  ArrowRightLeft
 } from 'lucide-vue-next'
 
 const toast = useToast()
@@ -57,6 +58,15 @@ const messagesForm = ref<AutomaticMessages>({
 })
 const isSavingMessages = ref(false)
 
+// Transfer modal states
+const showTransferModal = ref(false)
+const transferSourceId = ref('')
+const transferTargetId = ref('')
+const transferMode = ref<'all' | 'by_status'>('all')
+const transferStatuses = ref<string[]>([])
+const isTransferring = ref(false)
+const transferResult = ref<{ transferred: number; skipped: number; errors: string[] } | null>(null)
+
 // Form state
 const newInstanceForm = ref<WhatsAppInstancePayload>({
   name: '',
@@ -76,7 +86,14 @@ const newInstanceForm = ref<WhatsAppInstancePayload>({
 })
 const isCreating = ref(false)
 
-let pollInterval: ReturnType<typeof setInterval> | null = null
+function handleWhatsAppInstancesUpdate(event: Event) {
+  const customEvent = event as CustomEvent
+  const payload = customEvent.detail
+  if (payload?.instances) {
+    instances.value = payload.instances as WhatsAppInstance[]
+    isLoading.value = false
+  }
+}
 
 const departmentOptions = computed(() =>
   departments.value.filter((dept) => dept.isActive),
@@ -389,6 +406,50 @@ async function saveAutomaticMessages() {
   }
 }
 
+function openTransferModal(instance: WhatsAppInstance) {
+  transferSourceId.value = instance.id
+  transferTargetId.value = ''
+  transferMode.value = 'all'
+  transferStatuses.value = []
+  transferResult.value = null
+  showTransferModal.value = true
+}
+
+async function executeTransfer() {
+  if (!transferSourceId.value || !transferTargetId.value) {
+    toast.error('Selecione a instância de destino')
+    return
+  }
+
+  if (transferSourceId.value === transferTargetId.value) {
+    toast.error('Instância de origem e destino não podem ser iguais')
+    return
+  }
+
+  isTransferring.value = true
+  transferResult.value = null
+
+  try {
+    const { data } = await whatsappInstancesApi.transferConversations({
+      sourceInstanceId: transferSourceId.value,
+      targetInstanceId: transferTargetId.value,
+      filter: {
+        mode: transferMode.value,
+        ...(transferMode.value === 'by_status' && { statuses: transferStatuses.value }),
+      },
+    })
+
+    if (data) {
+      transferResult.value = data
+      toast.success(`${data.transferred} conversas transferidas${data.skipped > 0 ? `, ${data.skipped} ignoradas` : ''}`)
+    }
+  } catch (err: any) {
+    toast.error(err?.response?.data?.error || err.message || 'Erro ao transferir conversas')
+  } finally {
+    isTransferring.value = false
+  }
+}
+
 async function openQrModal(instance: WhatsAppInstance) {
   if (instance.connectionType === 'meta_official') {
     toast.info('Instância Meta oficial não usa QR Code')
@@ -561,14 +622,11 @@ onMounted(async () => {
   await fetchBots()
   await fetchDepartments()
 
-  // Poll for updates every 10 seconds
-  pollInterval = setInterval(fetchInstances, 10000)
+  window.addEventListener('ws:whatsapp-instances', handleWhatsAppInstancesUpdate)
 })
 
 onUnmounted(() => {
-  if (pollInterval) {
-    clearInterval(pollInterval)
-  }
+  window.removeEventListener('ws:whatsapp-instances', handleWhatsAppInstancesUpdate)
 })
 </script>
 
@@ -927,6 +985,17 @@ onUnmounted(() => {
             >
               <Star class="w-4 h-4" />
               Padrao
+            </button>
+
+            <!-- Transfer Conversations -->
+            <button
+              v-if="instances.length > 1"
+              @click="openTransferModal(instance)"
+              class="btn-sm btn-ghost"
+              title="Transferir conversas para outra instancia"
+            >
+              <ArrowRightLeft class="w-4 h-4" />
+              Transferir
             </button>
 
             <!-- Delete -->
@@ -1308,6 +1377,103 @@ onUnmounted(() => {
             >
               <Loader2 v-if="isSavingMessages" class="w-4 h-4 animate-spin" />
               {{ isSavingMessages ? 'Salvando...' : 'Salvar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Transfer Conversations Modal -->
+    <Teleport to="body">
+      <div
+        v-if="showTransferModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        @click.self="showTransferModal = false"
+      >
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full">
+          <div class="p-6 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xl font-semibold text-gray-900">Transferir Conversas</h2>
+              <button @click="showTransferModal = false" class="p-2 hover:bg-gray-100 rounded-lg">
+                <X class="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <p class="text-sm text-gray-500 mt-1">
+              De: <span class="font-medium">{{ instances.find(i => i.id === transferSourceId)?.name }}</span>
+            </p>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <!-- Target Instance -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Instancia de destino *
+              </label>
+              <select v-model="transferTargetId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                <option value="">Selecione...</option>
+                <option
+                  v-for="inst in instances.filter(i => i.id !== transferSourceId)"
+                  :key="inst.id"
+                  :value="inst.id"
+                >
+                  {{ inst.name }} ({{ inst.connected ? 'Conectado' : 'Desconectado' }})
+                </option>
+              </select>
+            </div>
+
+            <!-- Filter Mode -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Quais conversas transferir?
+              </label>
+              <select v-model="transferMode" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                <option value="all">Todas as conversas ativas</option>
+                <option value="by_status">Filtrar por status</option>
+              </select>
+            </div>
+
+            <!-- Status Filter -->
+            <div v-if="transferMode === 'by_status'" class="space-y-2">
+              <label class="block text-sm font-medium text-gray-700">Status</label>
+              <label v-for="s in [{ value: 'active', label: 'Ativo' }, { value: 'waiting', label: 'Aguardando' }, { value: 'inactive', label: 'Inativo' }]" :key="s.value" class="flex items-center gap-2">
+                <input type="checkbox" :value="s.value" v-model="transferStatuses" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                <span class="text-sm text-gray-700">{{ s.label }}</span>
+              </label>
+            </div>
+
+            <!-- Warning -->
+            <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div class="flex items-start gap-2">
+                <AlertCircle class="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <p class="text-sm text-yellow-800">
+                  As conversas transferidas passarao a enviar e receber mensagens pela instancia de destino.
+                </p>
+              </div>
+            </div>
+
+            <!-- Result -->
+            <div v-if="transferResult" class="p-3 bg-green-50 border border-green-200 rounded-lg">
+              <p class="text-sm text-green-800 font-medium">Transferencia concluida</p>
+              <p class="text-sm text-green-700">{{ transferResult.transferred }} transferidas, {{ transferResult.skipped }} ignoradas</p>
+              <div v-if="transferResult.errors.length > 0" class="mt-2 space-y-1">
+                <p v-for="(err, idx) in transferResult.errors" :key="idx" class="text-xs text-red-600">{{ err }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-6 border-t border-gray-200 flex justify-end gap-3">
+            <button @click="showTransferModal = false" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              {{ transferResult ? 'Fechar' : 'Cancelar' }}
+            </button>
+            <button
+              v-if="!transferResult"
+              @click="executeTransfer"
+              :disabled="isTransferring || !transferTargetId"
+              class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            >
+              <Loader2 v-if="isTransferring" class="w-4 h-4 animate-spin" />
+              <ArrowRightLeft v-else class="w-4 h-4" />
+              {{ isTransferring ? 'Transferindo...' : 'Transferir' }}
             </button>
           </div>
         </div>

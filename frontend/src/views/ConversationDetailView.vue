@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { conversationsApi, messagesApi, botsApi, finalizationsApi, queueApi, iaApi, tagsApi, cannedResponsesApi } from '@/api'
+import { conversationsApi, messagesApi, botsApi, finalizationsApi, queueApi, iaApi, tagsApi, cannedResponsesApi, whatsappFeaturesApi, contactsApi } from '@/api'
 import { useWhitelabelStore } from '@/stores/whitelabel'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -38,15 +38,24 @@ import {
   Zap,
   StickyNote,
   Volume2,
-  Calendar
+  Calendar,
+  Forward,
+  Phone,
+  PhoneOff,
+  CheckCheck,
+  UserPlus,
 } from 'lucide-vue-next'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import AuraResponseCard from '@/components/aura/AuraResponseCard.vue'
 import TransferModal from '@/components/modals/TransferModal.vue'
 import ConversationAppointments from '@/components/conversations/ConversationAppointments.vue'
+import EmojiPicker from '@/components/conversations/EmojiPicker.vue'
+import MessageContextMenu from '@/components/conversations/MessageContextMenu.vue'
+import PollMessage from '@/components/conversations/PollMessage.vue'
+import ForwardModal from '@/components/conversations/ForwardModal.vue'
 import { useToast } from 'vue-toastification'
 import { format } from 'date-fns'
-import type { Conversation, Message, MessageType, BotSession, Finalization, Tag as TagType, CannedResponse } from '@/types'
+import type { Conversation, Message, MessageType, BotSession, Finalization, Tag as TagType, CannedResponse, MessageReaction, MessageAck as MessageAckType, TypingIndicator } from '@/types'
 import type { AuraWebhookResponse } from '@/types/aura'
 import { getSocket } from '@/services/socket'
 
@@ -126,6 +135,17 @@ const isNoteMode = ref(false)
 const notesEnabled = computed(
   () => whitelabelStore.isFeatureEnabled('enableNotes'),
 )
+
+// WhatsApp Features
+const contextMenu = ref<{ message: Message; x: number; y: number } | null>(null)
+const showEmojiPicker = ref<{ messageId: string; x: number; y: number } | null>(null)
+const showForwardModal = ref(false)
+const forwardMessageId = ref('')
+const messageReactions = ref<Map<string, MessageReaction[]>>(new Map())
+const messageAcks = ref<Map<string, number>>(new Map())
+const typingIndicator = ref<TypingIndicator | null>(null)
+const incomingCallData = ref<{ from: string; isVideo: boolean } | null>(null)
+let typingTimeout: ReturnType<typeof setTimeout> | null = null
 
 // Canned Responses
 const showCannedResponses = ref(false)
@@ -1231,6 +1251,258 @@ function getAuraPayload(message: Message): AuraWebhookResponse | null {
   return candidate
 }
 
+// --- WhatsApp Features Handlers ---
+
+function getSessionName(): string {
+  return conversation.value?.instanceId || conversation.value?.sessionName || 'default'
+}
+
+function getWppMsgId(message: Message): string {
+  return message.messageId || message._id
+}
+
+function parseVCardName(vcard: string): string {
+  // Try FN: field first (full name)
+  const fnMatch = vcard.match(/FN:(.+)/i)
+  if (fnMatch) return fnMatch[1].trim()
+  // Fallback to N: field
+  const nMatch = vcard.match(/N:;?([^;]+)/i)
+  if (nMatch) return nMatch[1].trim()
+  return 'Contato'
+}
+
+function parseVCardPhone(vcard: string): string {
+  const telMatch = vcard.match(/TEL[^:]*:(.+)/i)
+  if (telMatch) return telMatch[1].trim()
+  return ''
+}
+
+function parseVCardIdentifier(vcard: string): string {
+  // Extract waid (WhatsApp ID) from TEL field
+  const waidMatch = vcard.match(/waid=(\d+)/i)
+  if (waidMatch) return waidMatch[1]
+  // Fallback: extract digits from phone
+  const phone = parseVCardPhone(vcard)
+  return phone.replace(/\D/g, '')
+}
+
+async function saveVCardContact(vcard: string) {
+  const name = parseVCardName(vcard)
+  const identifier = parseVCardIdentifier(vcard)
+  if (!identifier) {
+    toast.error('Não foi possível extrair o número do contato')
+    return
+  }
+  try {
+    await contactsApi.create({
+      identifier,
+      provider: conversation.value?.provider || 'whatsapp',
+      name,
+    })
+    toast.success(`Contato "${name}" salvo com sucesso!`)
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || err?.message || ''
+    if (msg.includes('Already exists') || msg.includes('already exists')) {
+      toast.warning('Este contato já existe no sistema')
+    } else {
+      toast.error('Erro ao salvar contato')
+    }
+  }
+}
+
+function openContextMenu(message: Message, event: MouseEvent) {
+  if (message.type === 'note' || message.isNote) return
+  event.preventDefault()
+  // Clamp to viewport
+  const x = Math.min(event.clientX, window.innerWidth - 200)
+  const y = Math.min(event.clientY, window.innerHeight - 300)
+  contextMenu.value = { message, x, y }
+}
+
+function closeContextMenu() {
+  contextMenu.value = null
+}
+
+async function handleReact(message: Message) {
+  closeContextMenu()
+  showEmojiPicker.value = {
+    messageId: getWppMsgId(message),
+    x: Math.min(window.innerWidth - 300, window.innerWidth / 2),
+    y: Math.min(window.innerHeight - 250, window.innerHeight / 2),
+  }
+}
+
+async function sendReaction(emoji: string) {
+  if (!showEmojiPicker.value) return
+  const msgId = showEmojiPicker.value.messageId
+  showEmojiPicker.value = null
+  try {
+    await whatsappFeaturesApi.sendReaction({
+      sessionName: getSessionName(),
+      messageId: msgId,
+      emoji,
+    })
+    // Optimistic update
+    const existing = messageReactions.value.get(msgId) || []
+    existing.push({ messageId: msgId, emoji, sender: 'me', timestamp: Date.now() })
+    messageReactions.value.set(msgId, existing)
+  } catch {
+    toast.error('Erro ao enviar reação')
+  }
+}
+
+async function handleForward(message: Message) {
+  closeContextMenu()
+  forwardMessageId.value = getWppMsgId(message)
+  showForwardModal.value = true
+}
+
+async function doForward(toChatId: string) {
+  try {
+    await whatsappFeaturesApi.forwardMessage({
+      sessionName: getSessionName(),
+      messageId: forwardMessageId.value,
+      toChatId,
+    })
+    toast.success('Mensagem encaminhada')
+    showForwardModal.value = false
+  } catch {
+    toast.error('Erro ao encaminhar mensagem')
+  }
+}
+
+async function handleEdit(message: Message) {
+  closeContextMenu()
+  const newText = prompt('Editar mensagem:', message.message || '')
+  if (newText === null || newText === message.message) return
+  try {
+    await whatsappFeaturesApi.editMessage(getSessionName(), getWppMsgId(message), newText)
+    const idx = messages.value.findIndex(m => m._id === message._id)
+    if (idx >= 0) messages.value[idx] = { ...messages.value[idx], message: newText }
+    toast.success('Mensagem editada')
+  } catch {
+    toast.error('Erro ao editar mensagem')
+  }
+}
+
+async function handleDelete(message: Message) {
+  closeContextMenu()
+  if (!confirm('Apagar esta mensagem?')) return
+  try {
+    await whatsappFeaturesApi.deleteMessage(getSessionName(), conversation.value?.identifier || '', getWppMsgId(message))
+    messages.value = messages.value.filter(m => m._id !== message._id)
+    toast.success('Mensagem apagada')
+  } catch {
+    toast.error('Erro ao apagar mensagem')
+  }
+}
+
+async function handleStar(message: Message) {
+  closeContextMenu()
+  try {
+    await whatsappFeaturesApi.starMessage(getSessionName(), getWppMsgId(message), true)
+    toast.success('Mensagem favoritada')
+  } catch {
+    toast.error('Erro ao favoritar mensagem')
+  }
+}
+
+function handleCopy(message: Message) {
+  closeContextMenu()
+  if (message.message) {
+    navigator.clipboard.writeText(message.message)
+    toast.success('Copiado!')
+  }
+}
+
+function getReactions(message: Message): MessageReaction[] {
+  const realtimeReactions = messageReactions.value.get(message._id) || []
+  const persistedReactions: MessageReaction[] = (message.reactions || []).map(r => ({
+    messageId: message._id,
+    emoji: r.emoji,
+    sender: r.sender,
+    timestamp: r.timestamp,
+  }))
+  // Merge: use realtime if available, otherwise persisted
+  if (realtimeReactions.length > 0) return realtimeReactions
+  return persistedReactions
+}
+
+function getAckIcon(messageId: string): { icon: string; color: string } | null {
+  const ack = messageAcks.value.get(messageId)
+  if (ack === undefined || ack === null) return null
+  if (ack >= 3) return { icon: 'read', color: 'text-blue-500' }
+  if (ack >= 2) return { icon: 'delivered', color: 'text-gray-400' }
+  if (ack >= 1) return { icon: 'sent', color: 'text-gray-400' }
+  return { icon: 'pending', color: 'text-gray-300' }
+}
+
+// Socket event handlers for new features
+function handleReactionEvent(event: Event) {
+  const detail = (event as CustomEvent).detail
+  if (!detail) return
+  const reactions = messageReactions.value.get(detail.messageId) || []
+  reactions.push(detail)
+  messageReactions.value.set(detail.messageId, [...reactions])
+}
+
+function handleMessageEditedEvent(event: Event) {
+  const detail = (event as CustomEvent).detail
+  if (!detail) return
+  const idx = messages.value.findIndex(m => m._id === detail.messageId)
+  if (idx >= 0 && detail.newText) {
+    messages.value[idx] = { ...messages.value[idx], message: detail.newText }
+  }
+}
+
+function handleMessageDeletedEvent(event: Event) {
+  const detail = (event as CustomEvent).detail
+  if (!detail) return
+  messages.value = messages.value.filter(m => m._id !== detail.messageId)
+}
+
+function handleMessageAckEvent(event: Event) {
+  const detail = (event as CustomEvent).detail
+  if (!detail) return
+  messageAcks.value.set(detail.messageId, detail.ack)
+}
+
+function handleTypingEvent(event: Event) {
+  const detail = (event as CustomEvent).detail as TypingIndicator | null
+  if (!detail) return
+  if (detail.chatId !== conversation.value?.identifier) return
+  typingIndicator.value = detail
+  if (typingTimeout) clearTimeout(typingTimeout)
+  typingTimeout = setTimeout(() => { typingIndicator.value = null }, 5000)
+}
+
+function handlePollResponseEvent(event: Event) {
+  const detail = (event as CustomEvent).detail
+  if (!detail) return
+  // Update poll vote count optimistically in message metadata
+  const idx = messages.value.findIndex(m => m._id === detail.messageId)
+  if (idx >= 0) {
+    const msg = messages.value[idx]
+    const meta = (msg.metadata || {}) as Record<string, unknown>
+    const votes = (meta.pollVotes || {}) as Record<string, number>
+    if (detail.selectedOption) {
+      votes[detail.selectedOption] = (votes[detail.selectedOption] || 0) + 1
+    }
+    messages.value[idx] = { ...msg, metadata: { ...meta, pollVotes: votes } }
+  }
+}
+
+function handleIncomingCallEvent(event: Event) {
+  const detail = (event as CustomEvent).detail
+  if (!detail) return
+  incomingCallData.value = { from: detail.from, isVideo: detail.isVideo }
+  setTimeout(() => { incomingCallData.value = null }, 15000)
+}
+
+function dismissCall() {
+  incomingCallData.value = null
+}
+
 const socket = getSocket()
 let currentJoinedConversationId: string | null = null
 const processedMessageIds = new Set<string>()
@@ -1330,6 +1602,14 @@ onMounted(() => {
   window.addEventListener('ws:message', handleSocketMessage)
   window.addEventListener('ws:conversation', handleSocketMessage)
   window.addEventListener('keydown', handleEscapeKeydown)
+  // WhatsApp Features events
+  window.addEventListener('ws:message-reaction', handleReactionEvent)
+  window.addEventListener('ws:message-edited', handleMessageEditedEvent)
+  window.addEventListener('ws:message-deleted', handleMessageDeletedEvent)
+  window.addEventListener('ws:message-ack', handleMessageAckEvent)
+  window.addEventListener('ws:typing-indicator', handleTypingEvent)
+  window.addEventListener('ws:poll-response', handlePollResponseEvent)
+  window.addEventListener('ws:call-incoming', handleIncomingCallEvent)
 })
 
 onUnmounted(() => {
@@ -1337,6 +1617,15 @@ onUnmounted(() => {
   window.removeEventListener('ws:message', handleSocketMessage)
   window.removeEventListener('ws:conversation', handleSocketMessage)
   window.removeEventListener('keydown', handleEscapeKeydown)
+  // WhatsApp Features events cleanup
+  window.removeEventListener('ws:message-reaction', handleReactionEvent)
+  window.removeEventListener('ws:message-edited', handleMessageEditedEvent)
+  window.removeEventListener('ws:message-deleted', handleMessageDeletedEvent)
+  window.removeEventListener('ws:message-ack', handleMessageAckEvent)
+  window.removeEventListener('ws:typing-indicator', handleTypingEvent)
+  window.removeEventListener('ws:poll-response', handlePollResponseEvent)
+  window.removeEventListener('ws:call-incoming', handleIncomingCallEvent)
+  if (typingTimeout) clearTimeout(typingTimeout)
 })
 </script>
 
@@ -1650,6 +1939,7 @@ onUnmounted(() => {
             @touchmove="handleMessageTouchMove($event)"
             @touchend="handleMessageTouchEnd(message)"
             @touchcancel="resetSwipeState"
+            @contextmenu="openContextMenu(message, $event)"
           >
             <!-- Quoted message preview -->
             <div
@@ -1681,7 +1971,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Sticker Preview -->
-            <div v-else-if="message.type === 'sticker' && message.mediaUrl" class="mb-1.5">
+            <div v-else-if="(message.type === 'sticker' || message.type === 'sticker_gif') && message.mediaUrl" class="mb-1.5">
               <a :href="message.mediaUrl" target="_blank" class="block">
                 <img
                   :src="message.mediaUrl"
@@ -1689,6 +1979,11 @@ onUnmounted(() => {
                   loading="lazy"
                 />
               </a>
+            </div>
+
+            <!-- Poll Message -->
+            <div v-else-if="message.type === 'poll'" class="mb-1.5">
+              <PollMessage :message="message" />
             </div>
 
             <!-- Video Preview -->
@@ -1810,6 +2105,27 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <!-- Contact/vCard Preview -->
+            <div v-else-if="message.type === 'contact' || message.type === 'vcard'" class="mb-1.5">
+              <div class="flex items-center gap-2.5 p-2.5 bg-black/5 rounded-lg">
+                <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                  <User class="w-5 h-5 text-white" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium truncate">{{ parseVCardName(message.message) }}</p>
+                  <p v-if="parseVCardPhone(message.message)" class="text-xs opacity-60">{{ parseVCardPhone(message.message) }}</p>
+                </div>
+                <button
+                  @click.stop="saveVCardContact(message.message)"
+                  class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-lg transition-colors flex-shrink-0"
+                  title="Salvar contato"
+                >
+                  <UserPlus class="w-3.5 h-3.5" />
+                  <span>Salvar</span>
+                </button>
+              </div>
+            </div>
+
             <!-- Other media type indicator -->
             <div
               v-else-if="message.type !== 'text' && message.type !== 'chat' && !message.mediaUrl"
@@ -1832,16 +2148,36 @@ onUnmounted(() => {
             >
               <strong class="font-bold">{{ conversation?.name || conversation?.identifier || 'Cliente' }}</strong>
             </p>
-            <p v-if="message.message" class="text-sm whitespace-pre-wrap break-words leading-relaxed">{{ message.message }}</p>
+            <p v-if="message.message && message.type !== 'contact' && message.type !== 'vcard'" class="text-sm whitespace-pre-wrap break-words leading-relaxed">{{ message.message }}</p>
 
             <div v-if="getAuraPayload(message)" class="mt-1.5">
               <AuraResponseCard :response="getAuraPayload(message)!" />
             </div>
 
-            <!-- Time -->
-            <p class="text-[10px] mt-1 opacity-50 text-right">
-              {{ formatTime(message.createdAt) }}
-            </p>
+            <!-- Time + Ack -->
+            <div class="flex items-center justify-end gap-1 mt-1">
+              <p class="text-[10px] opacity-50">
+                {{ formatTime(message.createdAt) }}
+              </p>
+              <!-- Message delivery status -->
+              <template v-if="message.direction === 'outgoing'">
+                <CheckCheck v-if="getAckIcon(message._id)?.icon === 'read'" class="w-3 h-3 text-blue-400" />
+                <CheckCheck v-else-if="getAckIcon(message._id)?.icon === 'delivered'" class="w-3 h-3 text-gray-400" />
+                <Check v-else-if="getAckIcon(message._id)?.icon === 'sent'" class="w-3 h-3 text-gray-400" />
+                <span v-else class="w-3 h-3 inline-block rounded-full border border-gray-300" />
+              </template>
+            </div>
+
+            <!-- Reactions -->
+            <div v-if="getReactions(message).length > 0" class="flex flex-wrap gap-0.5 mt-1 -mb-1">
+              <span
+                v-for="(reaction, rIdx) in getReactions(message)"
+                :key="rIdx"
+                class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-white/20 border border-white/10"
+              >
+                {{ reaction.emoji }}
+              </span>
+            </div>
           </div>
 
           <!-- Reply button (outgoing) -->
@@ -1944,6 +2280,37 @@ onUnmounted(() => {
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div
+        v-if="typingIndicator"
+        class="px-4 py-1.5 border-t border-gray-100 bg-gray-50/80"
+      >
+        <div class="flex items-center gap-2">
+          <div class="flex gap-0.5">
+            <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms" />
+            <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms" />
+            <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms" />
+          </div>
+          <span class="text-xs text-gray-500 italic">digitando...</span>
+        </div>
+      </div>
+
+      <!-- Incoming Call Notification -->
+      <div
+        v-if="incomingCallData"
+        class="px-3 py-2 border-t border-gray-100 bg-green-50 flex items-center justify-between"
+      >
+        <div class="flex items-center gap-2">
+          <Phone class="w-4 h-4 text-green-600 animate-pulse" />
+          <span class="text-sm text-green-800">
+            Chamada {{ incomingCallData.isVideo ? 'de vídeo' : 'de voz' }} de {{ incomingCallData.from }}
+          </span>
+        </div>
+        <button @click="dismissCall" class="p-1.5 hover:bg-green-100 rounded-lg text-green-600">
+          <PhoneOff class="w-4 h-4" />
+        </button>
       </div>
 
       <!-- Reply Preview -->
@@ -2526,6 +2893,49 @@ onUnmounted(() => {
       :identifier="conversation.identifier"
       :contact-name="conversation.name || conversation.identifier"
       @close="showAppointmentsDrawer = false"
+    />
+
+    <!-- Context Menu -->
+    <MessageContextMenu
+      v-if="contextMenu"
+      :message="contextMenu.message"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      @react="handleReact"
+      @reply="(msg) => { startReply(msg); closeContextMenu() }"
+      @forward="handleForward"
+      @edit="handleEdit"
+      @delete="handleDelete"
+      @star="handleStar"
+      @copy="handleCopy"
+      @close="closeContextMenu"
+    />
+
+    <!-- Emoji Picker (for reactions) -->
+    <Teleport to="body">
+      <div
+        v-if="showEmojiPicker"
+        class="fixed inset-0 z-[60]"
+        @click="showEmojiPicker = null"
+      />
+      <div
+        v-if="showEmojiPicker"
+        class="fixed z-[61]"
+        :style="{ left: `${showEmojiPicker.x}px`, top: `${showEmojiPicker.y}px` }"
+      >
+        <EmojiPicker
+          @select="sendReaction"
+          @close="showEmojiPicker = null"
+        />
+      </div>
+    </Teleport>
+
+    <!-- Forward Modal -->
+    <ForwardModal
+      v-model="showForwardModal"
+      :message-id="forwardMessageId"
+      :session-name="getSessionName()"
+      @forward="doForward"
     />
   </div>
 </template>

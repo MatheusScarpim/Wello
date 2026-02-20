@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb'
 
 import appointmentRepository from '../repositories/AppointmentRepository'
 import availabilityRepository from '../repositories/AvailabilityRepository'
+import googleCalendarSyncService from './GoogleCalendarSyncService'
 
 export interface AppointmentPayload {
   contactId?: string
@@ -132,7 +133,7 @@ export class AppointmentService {
     }
 
     const now = new Date()
-    return await appointmentRepository.create({
+    const result = await appointmentRepository.create({
       contactId: payload.contactId || undefined,
       contactName: payload.contactName || undefined,
       contactIdentifier: payload.contactIdentifier || undefined,
@@ -151,6 +152,12 @@ export class AppointmentService {
       createdAt: now,
       updatedAt: now,
     } as any)
+
+    googleCalendarSyncService.syncToGoogle(result._id.toString(), 'create').catch(err =>
+      console.error('Erro sync Google Calendar (create):', err),
+    )
+
+    return result
   }
 
   async update(id: string, payload: Partial<AppointmentPayload>) {
@@ -172,10 +179,16 @@ export class AppointmentService {
     if (payload.serviceName !== undefined) updateData.serviceName = payload.serviceName
 
     const objectId = ObjectId.isValid(id) ? new ObjectId(id) : id
-    return await appointmentRepository.updateOne(
+    const result = await appointmentRepository.updateOne(
       { _id: objectId } as any,
       { $set: updateData },
     )
+
+    googleCalendarSyncService.syncToGoogle(id, 'update').catch(err =>
+      console.error('Erro sync Google Calendar (update):', err),
+    )
+
+    return result
   }
 
   async updateStatus(id: string, status: string) {
@@ -187,14 +200,26 @@ export class AppointmentService {
     }
 
     const objectId = ObjectId.isValid(id) ? new ObjectId(id) : id
-    return await appointmentRepository.updateOne(
+    const result = await appointmentRepository.updateOne(
       { _id: objectId } as any,
       { $set: { status, updatedAt: new Date() } },
     )
+
+    googleCalendarSyncService.syncToGoogle(id, 'update').catch(err =>
+      console.error('Erro sync Google Calendar (status):', err),
+    )
+
+    return result
   }
 
   async delete(id: string) {
     if (!id) return false
+
+    // Sync ANTES de deletar (precisa do googleCalendarEventId)
+    googleCalendarSyncService.syncToGoogle(id, 'delete').catch(err =>
+      console.error('Erro sync Google Calendar (delete):', err),
+    )
+
     const objectId = ObjectId.isValid(id) ? new ObjectId(id) : id
     return await appointmentRepository.deleteOne({ _id: objectId } as any)
   }

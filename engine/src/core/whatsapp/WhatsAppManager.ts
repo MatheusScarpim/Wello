@@ -146,6 +146,9 @@ class WhatsAppManager extends EventEmitter {
         waitForLogin: false,
         tokenStore: activeTokenStore,
         folderNameToken: this.config.folderNameToken,
+        puppeteerOptions: {
+          protocolTimeout: 300000,
+        },
         browserArgs: [
           '--no-sandbox',
           '--aggressive-cache-discard',
@@ -561,6 +564,35 @@ class WhatsAppManager extends EventEmitter {
         formattedNumber,
         mediaFile.path,
         filename,
+        caption,
+      )
+    } finally {
+      await mediaFile.cleanup()
+    }
+  }
+
+  /**
+   * Envia um audio como mensagem de voz (PTT)
+   */
+  public async sendPtt(
+    to: string,
+    pathOrBase64: string,
+    filename: string,
+    caption?: string,
+  ): Promise<any> {
+    if (!this.client) {
+      throw new Error('Cliente WhatsApp não está conectado')
+    }
+
+    const formattedNumber = this.formatRecipient(to)
+    const mediaFile = await prepareLocalMediaPayload(pathOrBase64, filename)
+    // Garante que o filename tenha extensão .ogg (formato final após conversão)
+    const oggFilename = filename.replace(/\.(webm|mp4|m4a|mp3|wav|aac)$/i, '.ogg')
+    try {
+      return await this.client.sendPtt(
+        formattedNumber,
+        mediaFile.path,
+        oggFilename,
         caption,
       )
     } finally {

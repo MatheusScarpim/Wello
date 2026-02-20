@@ -9,6 +9,11 @@ router.get('/status', (req, res) =>
   whatsappInstanceController.getStatus(req, res),
 )
 
+// Transfere conversas entre instâncias
+router.post('/transfer-conversations', (req, res) =>
+  whatsappInstanceController.transferConversations(req, res),
+)
+
 // Lista todas as instâncias
 router.get('/', (req, res) => whatsappInstanceController.list(req, res))
 

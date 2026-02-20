@@ -136,25 +136,8 @@ export async function mediaUploadMiddleware(
 ): Promise<void> {
   try {
     // Se storage não está pronto, apenas segue sem tentar upload
-    const incomingBase64 = req.body.mediaBase64
-    const inlineFallback = () => {
-      if (!incomingBase64) return
-
-      const sanitizedBase64 = incomingBase64.replace(/^data:[^;]+;base64,/, '')
-      req.body.mediaUrl = incomingBase64
-      req.body.mediaStorage = {
-        provider: 'inline_base64',
-        size: Buffer.from(sanitizedBase64, 'base64').length,
-        blobName: '',
-        container: '',
-        originalUrl: '',
-      }
-      delete req.body.mediaBase64
-      delete req.body.mediaBase64
-    }
-
+    // Se storage não está configurado, mantém mediaBase64 como está (não mover para mediaUrl)
     if (!azureStorageService.isInitialized()) {
-      inlineFallback()
       return next()
     }
 
@@ -187,34 +170,12 @@ export async function mediaUploadMiddleware(
       let finalFilename =
         filename || `media-${Date.now()}.${getExtensionFromType(type)}`
 
-      // Se for áudio, converte para MP4/AAC se necessário
+      // Áudio: NÃO converter formato aqui — a conversão para OGG/Opus
+      // é feita pelo WhatsAppMediaHelper antes do envio ao WhatsApp.
+      // Converter aqui (ex: webm→MP4) causava dupla conversão (webm→MP4→OGG)
+      // que corrompia o arquivo de áudio.
       if (type === 'audio') {
-        console.log(`🎵 Áudio detectado - Content-Type: ${contentType}`)
-
-        const converted = await convertAudioBase64ToMp4(
-          mediaBase64,
-          contentType,
-        )
-        if (converted) {
-          finalBase64 = converted.base64
-          contentType = converted.contentType
-        }
-
-        // Garante extensão correta baseada no content-type
-        const audioExtMap: Record<string, string> = {
-          'audio/mp4': '.mp4',
-          'audio/m4a': '.m4a',
-          'audio/aac': '.aac',
-          'audio/ogg': '.ogg',
-          'audio/webm': '.webm',
-          'audio/mpeg': '.mp3',
-        }
-        const baseType = contentType.split(';')[0].trim().toLowerCase()
-        const correctExt = audioExtMap[baseType] || '.mp4'
-        finalFilename =
-          finalFilename.replace(/\.(ogg|webm|m4a|mp4|mp3|wav|aac)$/i, '') +
-          correctExt
-        console.log(`🎵 Filename ajustado para: ${finalFilename}`)
+        console.log(`🎵 Áudio detectado - Content-Type: ${contentType} (upload sem conversão)`)
       }
 
       uploadResult = await azureStorageService.uploadBase64(finalBase64, {

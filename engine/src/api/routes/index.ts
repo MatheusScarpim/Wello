@@ -31,6 +31,8 @@ import appointmentRoutes from './appointment.routes'
 import availabilityRoutes from './availability.routes'
 import serviceRoutes from './service.routes'
 import professionalRoutes from './professional.routes'
+import googleCalendarRoutes from './google-calendar.routes'
+import whatsappFeaturesRoutes from './whatsapp-features.routes'
 
 /**
  * Configurador central de rotas
@@ -68,6 +70,8 @@ export function setupRoutes(): Array<{ path: string; router: Router }> {
     { path: '/api/availability', router: availabilityRoutes },
     { path: '/api/services', router: serviceRoutes },
     { path: '/api/professionals', router: professionalRoutes },
+    { path: '/api/google-calendar', router: googleCalendarRoutes },
+    { path: '/api/whatsapp/features', router: whatsappFeaturesRoutes },
   ]
 }
 

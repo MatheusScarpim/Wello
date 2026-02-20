@@ -5,6 +5,7 @@ import InstagramManager from '../../core/providers/InstagramManager'
 import MetaManager from '../../core/providers/MetaManager'
 import WhatsAppMultiManager from '../../core/whatsapp/WhatsAppMultiManager'
 import whatsappInstanceRepository from '../repositories/WhatsAppInstanceRepository'
+import { ConversationService } from '../services/ConversationService'
 import { BaseController } from './BaseController'
 
 class WhatsAppInstanceController extends BaseController {
@@ -404,6 +405,57 @@ class WhatsAppInstanceController extends BaseController {
       } else {
         this.sendError(res, 'Falha ao definir como padrão', 500)
       }
+    } catch (error) {
+      this.sendInternalError(res, error as Error)
+    }
+  }
+
+  /**
+   * Transfere conversas de uma instância para outra
+   */
+  async transferConversations(req: Request, res: Response): Promise<void> {
+    try {
+      const { sourceInstanceId, targetInstanceId, filter } = req.body
+
+      if (!sourceInstanceId || !targetInstanceId) {
+        this.sendError(
+          res,
+          'sourceInstanceId e targetInstanceId são obrigatórios',
+          400,
+        )
+        return
+      }
+
+      if (sourceInstanceId === targetInstanceId) {
+        this.sendError(
+          res,
+          'Instância de origem e destino não podem ser iguais',
+          400,
+        )
+        return
+      }
+
+      if (
+        !ObjectId.isValid(sourceInstanceId) ||
+        !ObjectId.isValid(targetInstanceId)
+      ) {
+        this.sendError(res, 'IDs inválidos', 400)
+        return
+      }
+
+      const conversationService = new ConversationService()
+      const result =
+        await conversationService.transferConversationsToInstance({
+          sourceInstanceId,
+          targetInstanceId,
+          filter: filter || { mode: 'all' },
+        })
+
+      this.sendSuccess(
+        res,
+        result,
+        `${result.transferred} conversas transferidas com sucesso`,
+      )
     } catch (error) {
       this.sendInternalError(res, error as Error)
     }

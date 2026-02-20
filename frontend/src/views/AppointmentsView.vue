@@ -494,9 +494,14 @@ onMounted(() => {
                   @click.stop="openEditAppointment(apt)"
                   :title="`${apt.title} - ${formatTime(apt.date)} ate ${formatEndTime(apt.date, apt.duration)}`"
                 >
-                  <p class="text-[10px] font-bold truncate" :class="statusConfig[apt.status]?.text">
-                    {{ formatTime(apt.date) }} - {{ formatEndTime(apt.date, apt.duration) }}
-                  </p>
+                  <div class="flex items-center gap-1">
+                    <p class="text-[10px] font-bold truncate" :class="statusConfig[apt.status]?.text">
+                      {{ formatTime(apt.date) }} - {{ formatEndTime(apt.date, apt.duration) }}
+                    </p>
+                    <svg v-if="apt.googleCalendarEventId" class="w-2.5 h-2.5 text-blue-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" title="Sincronizado com Google Calendar">
+                      <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/>
+                    </svg>
+                  </div>
                   <p class="text-[11px] font-medium text-gray-800 truncate leading-tight">
                     {{ apt.title }}
                   </p>
@@ -593,6 +598,9 @@ onMounted(() => {
                     >
                       {{ statusConfig[apt.status]?.label }}
                     </span>
+                    <svg v-if="apt.googleCalendarEventId" class="w-3.5 h-3.5 text-blue-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" title="Sincronizado com Google Calendar">
+                      <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/>
+                    </svg>
                   </div>
                   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                     <span v-if="apt.professionalName">{{ apt.professionalName }}</span>
