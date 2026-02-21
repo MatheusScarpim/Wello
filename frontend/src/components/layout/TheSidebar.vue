@@ -27,6 +27,7 @@ import {
   ListFilter,
   Archive,
   Zap,
+  Megaphone,
   KanbanSquare,
   Calendar,
   Clock,
@@ -96,6 +97,7 @@ const navGroups = computed<NavGroup[]>(() => {
             { name: 'Todas Conversas', path: '/all-conversations', icon: ListFilter },
             { name: 'Arquivadas', path: '/all-conversations?archived=true', icon: Archive },
             { name: 'Contatos', path: '/contacts', icon: Users },
+            { name: 'Disparo', path: '/broadcast', icon: Megaphone },
           ]
         },
     {

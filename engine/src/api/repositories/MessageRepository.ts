@@ -98,9 +98,8 @@ export class MessageRepository extends BaseRepository<MessageDocument> {
    * Adiciona ou atualiza reação em uma mensagem (pelo messageId do WPP)
    */
   async addReaction(messageId: string, reaction: MessageReactionDoc) {
-    const collection = await this.getCollection()
     // Remove reação anterior do mesmo sender, depois adiciona a nova
-    await collection.updateOne(
+    await this.collection.updateOne(
       { messageId } as any,
       {
         $pull: { reactions: { sender: reaction.sender } } as any,
@@ -108,7 +107,7 @@ export class MessageRepository extends BaseRepository<MessageDocument> {
     )
     // Se emoji vazio/false, só remove (unreact)
     if (reaction.emoji && reaction.emoji !== '') {
-      await collection.updateOne(
+      await this.collection.updateOne(
         { messageId } as any,
         {
           $push: { reactions: reaction } as any,

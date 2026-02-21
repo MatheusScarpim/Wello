@@ -301,11 +301,9 @@ export interface PresencePayload {
 
 export interface BroadcastPayload {
   sessionName: string
-  recipients: string[]
+  contacts: string[]
   message: string
-  type?: MessageType
-  mediaBase64?: string
-  caption?: string
+  delayMs?: number
 }
 
 // Bot

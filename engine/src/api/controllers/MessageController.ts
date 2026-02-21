@@ -264,7 +264,7 @@ export class MessageController extends BaseController {
             to,
             operatorId: conversation.operatorId || req.user?.userId,
             operatorName: conversation.operatorName || params.operatorName,
-            mediaUrl: params.mediaUrl,
+            mediaUrl: params.mediaUrl || params.mediaBase64,
             mediaStorage: params.mediaStorage,
           })
           console.log(`✅ Mensagem salva no banco para ${to}`)
