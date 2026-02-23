@@ -1311,7 +1311,7 @@ async function saveVCardContact(vcard: string) {
 }
 
 function openContextMenu(message: Message, event: MouseEvent) {
-  if (message.type === 'note' || message.isNote) return
+  if (message.type === 'note' || message.isNote || message.type === 'system') return
   event.preventDefault()
   // Clamp to viewport
   const x = Math.min(event.clientX, window.innerWidth - 200)
@@ -1538,6 +1538,7 @@ const handleSocketMessage = async (event: Event) => {
         status: detail.status || 'sent',
         createdAt: detail.createdAt,
         mediaUrl: detail.mediaUrl,
+        metadata: detail.metadata,
         isNote: detail.isNote || false,
       }
 
@@ -1893,16 +1894,25 @@ onUnmounted(() => {
           :key="message._id"
           class="flex group"
           :class="[
-            message.type === 'note' || message.isNote
+            message.type === 'note' || message.isNote || message.type === 'system'
               ? 'justify-center'
               : message.direction === 'outgoing'
                 ? 'justify-end'
                 : 'justify-start'
           ]"
         >
+          <!-- System message bubble -->
+          <div
+            v-if="message.type === 'system'"
+            class="max-w-[85%] sm:max-w-[70%] px-4 py-1.5 rounded-full bg-gray-200/80 text-center"
+          >
+            <p class="text-[11px] text-gray-500 italic">{{ message.message }}</p>
+            <p class="text-[9px] text-gray-400 mt-0.5">{{ formatTime(message.createdAt) }}</p>
+          </div>
+
           <!-- Internal Note bubble -->
           <div
-            v-if="message.type === 'note' || message.isNote"
+            v-else-if="message.type === 'note' || message.isNote"
             class="message-note max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl"
           >
             <div class="flex items-center gap-1.5 mb-1">
@@ -1931,7 +1941,7 @@ onUnmounted(() => {
           </button>
 
           <div
-            v-if="message.type !== 'note' && !message.isNote"
+            v-if="message.type !== 'note' && !message.isNote && message.type !== 'system'"
             class="message-bubble"
             :class="message.direction === 'outgoing' ? 'message-outgoing' : 'message-incoming'"
             :style="getMessageSwipeStyle(message)"
@@ -2126,6 +2136,57 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <!-- List message -->
+            <div
+              v-else-if="message.type === 'list'"
+              class="mb-1.5"
+            >
+              <!-- Rich display when metadata available -->
+              <template v-if="message.metadata?.sections">
+                <p v-if="message.metadata.title" class="text-sm font-semibold mb-0.5">{{ message.metadata.title }}</p>
+                <p v-if="message.metadata.description" class="text-xs opacity-80 mb-2">{{ message.metadata.description }}</p>
+                <div v-for="section in (message.metadata.sections as any[])" :key="section.title" class="space-y-1 mb-1.5">
+                  <p v-if="section.title" class="text-[10px] font-semibold uppercase opacity-50">{{ section.title }}</p>
+                  <div
+                    v-for="(row, rowIndex) in section.rows"
+                    :key="row.rowId"
+                    class="px-2.5 py-1.5 text-xs rounded-lg border border-black/10 bg-black/5"
+                  >
+                    <span class="font-semibold opacity-60">{{ rowIndex + 1 }}.</span> {{ row.title }}
+                    <span v-if="row.description" class="block text-[10px] opacity-50 ml-4">{{ row.description }}</span>
+                  </div>
+                </div>
+              </template>
+              <!-- Fallback: show message text -->
+              <p v-else-if="message.message" class="text-sm whitespace-pre-wrap break-words leading-relaxed">{{ message.message }}</p>
+              <p v-else class="text-xs opacity-50 italic">Mensagem de lista</p>
+            </div>
+
+            <!-- Buttons message -->
+            <div
+              v-else-if="message.type === 'buttons'"
+              class="mb-1.5"
+            >
+              <!-- Rich display when metadata available -->
+              <template v-if="message.metadata?.buttons">
+                <p v-if="message.metadata.title" class="text-sm font-semibold mb-0.5">{{ message.metadata.title }}</p>
+                <p v-if="message.metadata.description" class="text-xs opacity-80 mb-2">{{ message.metadata.description }}</p>
+                <div class="flex flex-col gap-1">
+                  <div
+                    v-for="btn in (message.metadata.buttons as any[])"
+                    :key="btn.id"
+                    class="px-2.5 py-1.5 text-xs rounded-lg border border-black/10 bg-black/5 text-center"
+                  >
+                    {{ btn.text }}
+                  </div>
+                </div>
+                <p v-if="message.metadata.footer" class="text-[10px] opacity-40 mt-1">{{ message.metadata.footer }}</p>
+              </template>
+              <!-- Fallback: show message text -->
+              <p v-else-if="message.message" class="text-sm whitespace-pre-wrap break-words leading-relaxed">{{ message.message }}</p>
+              <p v-else class="text-xs opacity-50 italic">Mensagem de botoes</p>
+            </div>
+
             <!-- Other media type indicator -->
             <div
               v-else-if="message.type !== 'text' && message.type !== 'chat' && !message.mediaUrl"
@@ -2148,7 +2209,7 @@ onUnmounted(() => {
             >
               <strong class="font-bold">{{ conversation?.name || conversation?.identifier || 'Cliente' }}</strong>
             </p>
-            <p v-if="message.message && message.type !== 'contact' && message.type !== 'vcard'" class="text-sm whitespace-pre-wrap break-words leading-relaxed">{{ message.message }}</p>
+            <p v-if="message.message && message.type !== 'contact' && message.type !== 'vcard' && message.type !== 'list' && message.type !== 'buttons'" class="text-sm whitespace-pre-wrap break-words leading-relaxed">{{ message.message }}</p>
 
             <div v-if="getAuraPayload(message)" class="mt-1.5">
               <AuraResponseCard :response="getAuraPayload(message)!" />

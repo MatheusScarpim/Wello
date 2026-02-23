@@ -79,6 +79,13 @@ function getMessagePreview(message: Message) {
   if (message.type === 'audio' || message.type === 'ptt') return '[Audio]'
   if (message.type === 'video') return '[Video]'
   if (message.type === 'document') return `[Documento: ${message.filename || 'arquivo'}]`
+  if (message.type === 'system') return message.message
+  if (message.type === 'list') {
+    return (message as any).metadata?.title || message.message || 'Mensagem de lista'
+  }
+  if (message.type === 'buttons') {
+    return (message as any).metadata?.title || message.message || 'Mensagem de botões'
+  }
   return `[${message.type}]`
 }
 
@@ -345,9 +352,18 @@ function getTagColor(tagName: string) {
               v-for="message in messages"
               :key="message._id"
               class="flex"
-              :class="message.direction === 'outgoing' ? 'justify-end' : 'justify-start'"
+              :class="message.type === 'system' ? 'justify-center' : message.direction === 'outgoing' ? 'justify-end' : 'justify-start'"
             >
+              <!-- System message -->
               <div
+                v-if="message.type === 'system'"
+                class="max-w-[80%] px-3 py-1 rounded-full bg-gray-200/80 text-center"
+              >
+                <p class="text-[10px] text-gray-500 italic">{{ message.message }}</p>
+              </div>
+
+              <div
+                v-else
                 class="max-w-[80%] px-3 py-2 rounded-2xl text-sm"
                 :class="message.direction === 'outgoing'
                   ? 'bg-primary-500 text-white'
@@ -371,7 +387,7 @@ function getTagColor(tagName: string) {
 
                 <!-- Media indicator -->
                 <div
-                  v-if="message.type !== 'text' && message.type !== 'chat'"
+                  v-if="message.type !== 'text' && message.type !== 'chat' && message.type !== 'list' && message.type !== 'buttons'"
                   class="flex items-center gap-1.5 mb-1"
                   :class="message.direction === 'outgoing' ? 'opacity-75' : 'text-gray-500'"
                 >
@@ -387,8 +403,45 @@ function getTagColor(tagName: string) {
                   style="max-height: 150px; object-fit: cover;"
                 />
 
+                <!-- List message -->
+                <div v-if="message.type === 'list'" class="mb-0.5">
+                  <template v-if="(message as any).metadata?.sections">
+                    <p v-if="(message as any).metadata.title" class="text-xs font-semibold mb-0.5">{{ (message as any).metadata.title }}</p>
+                    <p v-if="(message as any).metadata.description" class="text-[10px] opacity-80 mb-1.5">{{ (message as any).metadata.description }}</p>
+                    <div v-for="section in ((message as any).metadata.sections as any[])" :key="section.title" class="space-y-0.5 mb-1">
+                      <p v-if="section.title" class="text-[10px] font-semibold uppercase opacity-50">{{ section.title }}</p>
+                      <div v-for="(row, rowIndex) in section.rows" :key="row.rowId"
+                        class="px-2 py-1 text-[11px] rounded border"
+                        :class="message.direction === 'outgoing' ? 'border-white/20 bg-white/10' : 'border-black/10 bg-black/5'"
+                      >
+                        <span class="font-semibold opacity-60">{{ rowIndex + 1 }}.</span> {{ row.title }}
+                      </div>
+                    </div>
+                  </template>
+                  <p v-else-if="message.message" class="whitespace-pre-wrap break-words">{{ message.message }}</p>
+                  <p v-else class="text-xs opacity-50 italic">Mensagem de lista</p>
+                </div>
+
+                <!-- Buttons message -->
+                <div v-else-if="message.type === 'buttons'" class="mb-0.5">
+                  <template v-if="(message as any).metadata?.buttons">
+                    <p v-if="(message as any).metadata.title" class="text-xs font-semibold mb-0.5">{{ (message as any).metadata.title }}</p>
+                    <p v-if="(message as any).metadata.description" class="text-[10px] opacity-80 mb-1.5">{{ (message as any).metadata.description }}</p>
+                    <div class="flex flex-col gap-0.5">
+                      <div v-for="btn in ((message as any).metadata.buttons as any[])" :key="btn.id"
+                        class="px-2 py-1 text-[11px] rounded border text-center"
+                        :class="message.direction === 'outgoing' ? 'border-white/20 bg-white/10' : 'border-black/10 bg-black/5'"
+                      >
+                        {{ btn.text }}
+                      </div>
+                    </div>
+                  </template>
+                  <p v-else-if="message.message" class="whitespace-pre-wrap break-words">{{ message.message }}</p>
+                  <p v-else class="text-xs opacity-50 italic">Mensagem de botões</p>
+                </div>
+
                 <!-- Message text -->
-                <p class="whitespace-pre-wrap break-words">{{ getMessagePreview(message) }}</p>
+                <p v-else class="whitespace-pre-wrap break-words">{{ getMessagePreview(message) }}</p>
                 <p
                   class="text-[10px] mt-1 text-right"
                   :class="message.direction === 'outgoing' ? 'opacity-60' : 'text-gray-400'"

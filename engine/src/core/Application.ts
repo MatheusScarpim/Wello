@@ -473,6 +473,14 @@ export class Application {
           to: message.identifierProvider,
         })
 
+        // Se já tem operador atribuído, o bot não responde
+        if (conversation.operatorId) {
+          console.log(
+            `🚫 Bot ignorado — operador ${conversation.operatorName || conversation.operatorId} já está atendendo: ${message.identifier}`,
+          )
+          return
+        }
+
         // Verifica se a mensagem é um comando para atendimento humano
         if (messageText.toLowerCase() === '#human') {
           console.log(
@@ -605,24 +613,53 @@ export class Application {
             response,
           )
           // Salva resposta final do bot no banco
-          const botMessageText = response.buttons
-            ? `*${response.buttons.title}*\n${response.buttons.description || ''}`
-            : response.list
-              ? `*${response.list.title}*\n${response.list.description || ''}`
-              : response.media
-                ? response.media.caption || response.message || ''
-                : response.message || ''
-          if (botMessageText) {
+          let botMessageText = ''
+          let botMessageType = 'text'
+          let botMetadata: Record<string, any> | undefined
+
+          if (response.buttons) {
+            botMessageType = 'buttons'
+            botMessageText = response.buttons.title || ''
+            if (response.buttons.description) {
+              botMessageText += (botMessageText ? '\n' : '') + response.buttons.description
+            }
+            botMetadata = {
+              title: response.buttons.title,
+              description: response.buttons.description,
+              buttons: response.buttons.buttons,
+              footer: response.buttons.footer,
+            }
+          } else if (response.list) {
+            botMessageType = 'list'
+            botMessageText = response.list.title || ''
+            if (response.list.description) {
+              botMessageText += (botMessageText ? '\n' : '') + response.list.description
+            }
+            botMetadata = {
+              title: response.list.title,
+              description: response.list.description,
+              buttonText: response.list.buttonText,
+              sections: response.list.sections,
+            }
+          } else if (response.media) {
+            botMessageType = response.media.type || 'text'
+            botMessageText = response.media.caption || response.message || ''
+          } else {
+            botMessageText = response.message || ''
+          }
+
+          if (botMessageText || botMetadata) {
             await this.messageService.saveMessage({
               conversationId: botConversationId,
               message: botMessageText,
-              type: response.buttons ? 'text' : response.list ? 'text' : response.media?.type || 'text',
+              type: botMessageType,
               direction: 'outgoing',
               status: 'sent',
               from: 'bot',
               to: message.identifier,
               mediaUrl: response.media?.url,
               mediaStorage: response.media?.mediaStorage,
+              metadata: botMetadata,
             })
           }
         }

@@ -252,9 +252,27 @@ export class MessageController extends BaseController {
 
         // Salva mensagem no banco (usa a conversa já buscada acima)
         try {
+          // Monta metadata para mensagens de lista/botões
+          let metadata: Record<string, any> | undefined
+          if (type === 'list' && listSections) {
+            metadata = {
+              title: listTitle,
+              description: listDescription,
+              buttonText: listButtonText,
+              sections: listSections,
+            }
+          } else if (type === 'buttons' && buttons) {
+            metadata = {
+              title: buttonsTitle,
+              description: buttonsDescription,
+              buttons,
+              footer: buttonsFooter,
+            }
+          }
+
           await this.messageService.saveMessage({
             conversationId: conversation._id.toString(),
-            message: message || caption || '',
+            message: message || caption || listTitle || buttonsTitle || '',
             type,
             direction: 'outgoing',
             status: 'sent',
@@ -266,6 +284,7 @@ export class MessageController extends BaseController {
             operatorName: conversation.operatorName || params.operatorName,
             mediaUrl: params.mediaUrl,
             mediaStorage: params.mediaStorage,
+            metadata,
           })
           console.log(`✅ Mensagem salva no banco para ${to}`)
         } catch (saveError: any) {

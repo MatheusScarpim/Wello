@@ -23,7 +23,8 @@
       "Bash(pnpm run build:*)",
       "Bash(node node_modules/.bin/tsc:*)",
       "Bash(find:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

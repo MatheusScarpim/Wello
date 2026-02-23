@@ -54,9 +54,10 @@ export class AvailabilityRepository extends BaseRepository<AvailabilityDocument>
 
   async updateSettings(data: Partial<AvailabilityDocument>): Promise<boolean> {
     const settings = await this.getSettings()
+    const { _id, createdAt, ...updateData } = data as any
     return await this.updateOne(
       { _id: settings._id } as any,
-      { $set: { ...data, updatedAt: new Date() } },
+      { $set: { ...updateData, updatedAt: new Date() } },
     )
   }
 }

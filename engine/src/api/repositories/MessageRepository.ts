@@ -27,6 +27,7 @@ export interface MessageDocument extends Document {
     size?: number
     originalUrl?: string
   }
+  metadata?: Record<string, any>
   reactions?: MessageReactionDoc[]
   isRead: boolean
   readAt?: Date

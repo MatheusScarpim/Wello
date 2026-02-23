@@ -27,6 +27,7 @@ export interface SaveMessageParams {
     size?: number
     originalUrl?: string
   }
+  metadata?: Record<string, any>
   from?: string
   to?: string
   operatorId?: string
@@ -166,6 +167,7 @@ export class MessageService {
         quotedMessageId: params.quotedMessageId,
         mediaUrl: params.mediaUrl,
         mediaStorage: params.mediaStorage,
+        metadata: params.metadata,
         isRead: params.direction === 'outgoing',
         createdAt: now,
         updatedAt: now,
@@ -199,6 +201,7 @@ export class MessageService {
               status: params.status,
               createdAt: message.createdAt,
               mediaUrl: params.mediaUrl,
+              metadata: params.metadata,
             },
             params.conversationId,
             operatorId,

@@ -230,14 +230,14 @@ startConversation()
             <div v-for="section in msg.list.sections" :key="section.title" class="space-y-1 mt-1">
               <p class="text-[10px] font-semibold text-gray-500 uppercase">{{ section.title }}</p>
               <button
-                v-for="row in section.rows"
+                v-for="(row, rowIndex) in section.rows"
                 :key="row.rowId"
                 @click="handleButtonClick(row.rowId, row.title)"
                 :disabled="isProcessing || hasEnded"
                 class="w-full text-left px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {{ row.title }}
-                <span v-if="row.description" class="block text-[10px] text-gray-400">{{ row.description }}</span>
+                <span class="font-semibold opacity-60">{{ rowIndex + 1 }}.</span> {{ row.title }}
+                <span v-if="row.description" class="block text-[10px] text-gray-400 ml-4">{{ row.description }}</span>
               </button>
             </div>
           </div>
