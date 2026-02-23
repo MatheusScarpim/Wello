@@ -193,6 +193,12 @@ const router = createRouter({
           meta: { title: 'Profissionais', roles: ['admin', 'supervisor'] }
         },
         {
+          path: 'broadcast',
+          name: 'broadcast',
+          component: () => import('@/views/BroadcastView.vue'),
+          meta: { title: 'Disparo em Massa', roles: ['admin', 'supervisor'] }
+        },
+        {
           path: 'bot-builder',
           name: 'bot-builder-list',
           component: () => import('@/views/BotBuilderListView.vue'),

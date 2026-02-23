@@ -262,13 +262,14 @@ export class Application {
     // === Eventos avançados do WhatsApp ===
 
     WhatsAppMultiManager.on('messageReaction', async (data) => {
-      SocketServer.emitReaction(data, data.chatId || '')
       WebhookManager.trigger('message.reaction', data)
+      // Normaliza campos do WhatsApp
+      const msgId = data.msgId?._serialized || data.msgId?.id || String(data.msgId || '')
+      const sender = data.sender?._serialized || data.senderId || String(data.sender || '')
+      const emoji = data.reactionText || data.reaction || data.emoji || ''
+
       // Persistir reação no banco
       try {
-        const msgId = data.msgId?._serialized || data.msgId?.id || String(data.msgId || '')
-        const sender = data.sender?._serialized || data.senderId || String(data.sender || '')
-        const emoji = data.reactionText || data.reaction || data.emoji || ''
         if (msgId) {
           await messageRepository.addReaction(msgId, {
             emoji,
@@ -278,6 +279,26 @@ export class Application {
         }
       } catch (err) {
         console.warn('⚠️ Erro ao persistir reação:', err)
+      }
+
+      // Emitir pro socket com o _id do MongoDB (que o frontend usa como chave)
+      try {
+        if (msgId) {
+          const message = await messageRepository.findByMessageId(msgId)
+          if (message) {
+            SocketServer.emitReaction(
+              {
+                messageId: message._id?.toString(),
+                emoji,
+                sender,
+                timestamp: data.timestamp || Date.now(),
+              },
+              message.conversationId || data.chatId || '',
+            )
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Erro ao emitir reação via socket:', err)
       }
     })
 

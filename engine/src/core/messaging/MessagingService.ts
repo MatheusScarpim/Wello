@@ -3,6 +3,7 @@ import axios from 'axios'
 import whatsappInstanceRepository from '@/api/repositories/WhatsAppInstanceRepository'
 import InstagramManager from '../providers/InstagramManager'
 import MetaManager from '../providers/MetaManager'
+import { prepareLocalMediaPayload } from '../helpers/WhatsAppMediaHelper'
 import WhatsAppManager from '../whatsapp/WhatsAppManager'
 import WhatsAppMultiManager from '../whatsapp/WhatsAppMultiManager'
 
@@ -546,17 +547,38 @@ export class MessagingService {
             throw new Error('URL ou base64 do arquivo e obrigatorio')
           }
           {
-            const mediaPayload = await this.prepareMediaPayload(
+            let mediaPayload = await this.prepareMediaPayload(
               mediaUrl,
               mediaBase64,
             )
-            const targetFilename =
+            let targetFilename =
               filename ||
               (type === 'image'
                 ? 'image.jpg'
                 : type === 'audio'
-                  ? 'audio.mp3'
+                  ? 'audio.ogg'
                   : 'file')
+
+            // Converte audio (webm/mp4/etc) para ogg/opus antes de injetar no browser
+            // WPP.chat.sendFileMessage nao faz conversao — WhatsApp rejeita formatos nao-ogg
+            let audioCleanup: (() => Promise<void>) | null = null
+            if (type === 'audio') {
+              try {
+                const converted = await prepareLocalMediaPayload(mediaPayload, targetFilename)
+                const fs = await import('fs/promises')
+                const oggBuffer = await fs.readFile(converted.path)
+                mediaPayload = `data:audio/ogg;base64,${oggBuffer.toString('base64')}`
+                targetFilename = targetFilename.replace(/\.(webm|mp4|m4a|mp3|wav|aac)$/i, '.ogg')
+                if (!targetFilename.endsWith('.ogg')) {
+                  targetFilename = targetFilename.replace(/\.[^.]+$/, '.ogg')
+                }
+                audioCleanup = converted.cleanup
+                console.log(`🎵 [Media] Audio convertido para OGG/Opus (${(mediaPayload.length / 1024).toFixed(1)}KB)`)
+              } catch (convErr: any) {
+                console.error(`⚠️ [Media] Falha na conversao de audio, enviando formato original:`, convErr?.message || convErr)
+              }
+            }
+
             console.log(
               `📎 [Media] Enviando ${type} (${targetFilename}, ${(mediaPayload.length / 1024).toFixed(1)}KB) para ${formattedNumber}...`,
             )
@@ -567,6 +589,7 @@ export class MessagingService {
             // Injeta base64 em chunks e chama WPP.chat.sendFileMessage direto
             const page = client.page
             if (!page) {
+              if (audioCleanup) await audioCleanup()
               throw new Error('Sessao WhatsApp sem pagina ativa')
             }
 
@@ -666,10 +689,13 @@ export class MessagingService {
             ])) as any
 
             if (!sendResult.success) {
+              if (audioCleanup) await audioCleanup()
               throw new Error(
                 sendResult.error || 'Erro ao enviar midia',
               )
             }
+
+            if (audioCleanup) await audioCleanup()
 
             console.log(
               `📎 [Media] ${type} resultado: id=${sendResult.id}, timeout=${sendResult.timeout || false}`,
