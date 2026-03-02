@@ -44,6 +44,8 @@
     "fs": "0.0.1-security",
     "google-libphonenumber": "^3.2.43",
     "googleapis": "^171.4.0",
+    "instagram-private-api": "^1.46.1",
+    "instagram_mqtt": "^1.2.3",
     "jsonwebtoken": "^9.0.3",
     "moment": "^2.30.1",
     "mongodb": "^6.21.0",

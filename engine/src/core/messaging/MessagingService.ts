@@ -2,6 +2,7 @@ import axios from 'axios'
 
 import whatsappInstanceRepository from '@/api/repositories/WhatsAppInstanceRepository'
 import InstagramManager from '../providers/InstagramManager'
+import InstagramPrivateManager from '../providers/InstagramPrivateManager'
 import MetaManager from '../providers/MetaManager'
 import { prepareLocalMediaPayload } from '../helpers/WhatsAppMediaHelper'
 import WhatsAppManager from '../whatsapp/WhatsAppManager'
@@ -12,7 +13,7 @@ import WhatsAppMultiManager from '../whatsapp/WhatsAppMultiManager'
  */
 export interface SendMessageParams {
   to: string
-  provider: 'whatsapp' | 'meta_whatsapp' | 'meta' | 'instagram' | 'telegram' // Provider determina qual serviço usar
+  provider: 'whatsapp' | 'meta_whatsapp' | 'meta' | 'instagram' | 'instagram_private' | 'telegram' // Provider determina qual serviço usar
   message?: string
   type?:
     | 'text'
@@ -144,6 +145,9 @@ export class MessagingService {
 
         case 'instagram':
           return await this.sendViaInstagram(params)
+
+        case 'instagram_private':
+          return await this.sendViaInstagramPrivate(params)
 
         case 'telegram':
           return await this.sendViaTelegram(params)
@@ -1201,6 +1205,28 @@ export class MessagingService {
     } catch (error: any) {
       throw new Error(`Erro Instagram API: ${error.message}`)
     }
+  }
+
+  /**
+   * Envia via Instagram privado (instagram-private-api)
+   */
+  private async sendViaInstagramPrivate(
+    params: SendMessageParams,
+  ): Promise<SendMessageResult> {
+    const { to, message, type = 'text', mediaUrl, sessionName } = params
+
+    if (!sessionName) {
+      return { success: false, error: 'sessionName é obrigatório para instagram_private', provider: 'instagram_private' }
+    }
+
+    if (type === 'text' || !mediaUrl) {
+      const result = await InstagramPrivateManager.sendText(sessionName, to, message || '')
+      return { success: true, messageId: result.idMessage, provider: 'instagram_private' }
+    }
+
+    const mediaType = type === 'video' ? 'video' : 'image'
+    const result = await InstagramPrivateManager.sendMedia(sessionName, to, mediaUrl, mediaType)
+    return { success: true, messageId: result.idMessage, provider: 'instagram_private' }
   }
 
   /**

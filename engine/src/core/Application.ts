@@ -14,6 +14,7 @@ import BotFactory from './bot/BotFactory'
 import { MessageContext } from './bot/interfaces/IBotStage'
 import DatabaseManager from './database/DatabaseManager'
 import MessagingService from './messaging/MessagingService'
+import InstagramPrivateManager from './providers/InstagramPrivateManager'
 import { BotSessionRepository } from './repositories/BotSessionRepository'
 import WhatsAppManager, { IncomingMessage } from './whatsapp/WhatsAppManager'
 import WhatsAppMultiManager from './whatsapp/WhatsAppMultiManager'
@@ -92,6 +93,9 @@ export class Application {
 
       // 5. Conecta ao WhatsApp
       await this.initializeWhatsApp()
+
+      // 5.1 Inicializa Instagram privado
+      await this.initializeInstagramPrivate()
 
       // 6. Configura limpeza automática
       this.setupCleanupJobs()
@@ -216,6 +220,36 @@ export class Application {
 
     // Conecta
     await WhatsAppManager.connect()
+  }
+
+  /**
+   * Inicializa contas Instagram privado e registra handlers
+   */
+  private async initializeInstagramPrivate(): Promise<void> {
+    try {
+      InstagramPrivateManager.on(
+        'message',
+        ({ sessionName, instanceName, message }: { sessionName: string; instanceName: string; message: IncomingMessage }) => {
+          this.handleIncomingMessage({
+            ...message,
+            _instanceName: instanceName,
+            _sessionName: sessionName,
+          } as IncomingMessage)
+        },
+      )
+
+      InstagramPrivateManager.on('connected', ({ sessionName }: { sessionName: string }) => {
+        console.log(`✅ [Instagram Privado] Conta ${sessionName} conectada`)
+      })
+
+      InstagramPrivateManager.on('disconnected', ({ sessionName }: { sessionName: string }) => {
+        console.log(`⚠️ [Instagram Privado] Conta ${sessionName} desconectada`)
+      })
+
+      await InstagramPrivateManager.initialize()
+    } catch (error: any) {
+      console.warn('⚠️ Erro ao inicializar Instagram privado:', error.message)
+    }
   }
 
   /**
