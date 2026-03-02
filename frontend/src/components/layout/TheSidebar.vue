@@ -32,7 +32,9 @@ import {
   Calendar,
   Clock,
   Briefcase,
-  UserCircle
+  UserCircle,
+  FileText,
+  Send
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -100,6 +102,13 @@ const navGroups = computed<NavGroup[]>(() => {
             { name: 'Disparo', path: '/broadcast', icon: Megaphone },
           ]
         },
+    {
+      title: 'Campanhas',
+      items: [
+        { name: 'Campanhas', path: '/campaigns', icon: Send },
+        { name: 'Templates HSM', path: '/hsm-templates', icon: FileText },
+      ]
+    },
     {
       title: 'Comercial',
       items: [

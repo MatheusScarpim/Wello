@@ -34,6 +34,8 @@ import serviceRoutes from './service.routes'
 import professionalRoutes from './professional.routes'
 import googleCalendarRoutes from './google-calendar.routes'
 import whatsappFeaturesRoutes from './whatsapp-features.routes'
+import hsmRoutes from './hsm.routes'
+import campaignRoutes from './campaign.routes'
 
 /**
  * Configurador central de rotas
@@ -74,6 +76,8 @@ export function setupRoutes(): Array<{ path: string; router: Router }> {
     { path: '/api/professionals', router: professionalRoutes },
     { path: '/api/google-calendar', router: googleCalendarRoutes },
     { path: '/api/whatsapp/features', router: whatsappFeaturesRoutes },
+    { path: '/api/hsm-templates', router: hsmRoutes },
+    { path: '/api/campaigns', router: campaignRoutes },
   ]
 }
 

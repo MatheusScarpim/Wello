@@ -28,6 +28,9 @@ class DatabaseManager {
     'availability_settings',
     'services',
     'professionals',
+    'hsm_templates',
+    'campaigns',
+    'campaign_contacts',
   ]
 
   private constructor() {
@@ -244,6 +247,39 @@ class DatabaseManager {
       await this.database
         .collection('appointments')
         .createIndex({ operatorId: 1, date: 1 })
+
+      // Índices para hsm_templates
+      await this.database
+        .collection('hsm_templates')
+        .createIndex({ instanceId: 1 })
+      await this.database
+        .collection('hsm_templates')
+        .createIndex({ status: 1 })
+      await this.database
+        .collection('hsm_templates')
+        .createIndex({ metaTemplateId: 1 }, { sparse: true })
+
+      // Índices para campaigns
+      await this.database
+        .collection('campaigns')
+        .createIndex({ status: 1 })
+      await this.database
+        .collection('campaigns')
+        .createIndex({ scheduledAt: 1 }, { sparse: true })
+      await this.database
+        .collection('campaigns')
+        .createIndex({ createdBy: 1 })
+
+      // Índices para campaign_contacts
+      await this.database
+        .collection('campaign_contacts')
+        .createIndex({ campaignId: 1, status: 1 })
+      await this.database
+        .collection('campaign_contacts')
+        .createIndex(
+          { campaignId: 1, phone: 1 },
+          { name: 'campaign_contacts_campaign_phone' },
+        )
 
       console.log('🔍 Índices criados com sucesso')
     } catch (error: any) {

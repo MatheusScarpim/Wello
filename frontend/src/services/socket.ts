@@ -75,6 +75,14 @@ export const connectSocket = (token: string | null) => {
   socket.on('presence.changed', (payload) => {
     window.dispatchEvent(new CustomEvent('ws:presence-changed', { detail: payload }))
   })
+
+  socket.on('campaign.updated', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:campaign-updated', { detail: payload }))
+  })
+
+  socket.on('campaign.progress', (payload) => {
+    window.dispatchEvent(new CustomEvent('ws:campaign-progress', { detail: payload }))
+  })
 }
 
 export const updateSocketToken = (token: string | null) => {

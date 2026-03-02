@@ -21,6 +21,8 @@ import WhatsAppMultiManager from './whatsapp/WhatsAppMultiManager'
 import fairDistributionService from './fairDistribution/FairDistributionService'
 import appointmentReminderService from './scheduler/AppointmentReminderService'
 import googleCalendarSyncScheduler from './scheduler/GoogleCalendarSyncScheduler'
+import campaignEngine from './campaigns/CampaignEngine'
+import campaignController from '@/api/controllers/CampaignController'
 
 // Verifica se esta usando modo multi-instancia
 const isMultiInstanceMode = process.env.WHATSAPP_MULTI_INSTANCE === 'true'
@@ -102,6 +104,8 @@ export class Application {
       fairDistributionService.start()
       appointmentReminderService.start()
       googleCalendarSyncScheduler.start()
+      campaignEngine.startScheduler()
+      campaignController.setCampaignEngine(campaignEngine)
 
       this.isInitialized = true
       console.log('✅ ScarlatChat inicializado com sucesso!')
@@ -1104,6 +1108,7 @@ export class Application {
       fairDistributionService.stop()
       appointmentReminderService.stop()
       googleCalendarSyncScheduler.stop()
+      campaignEngine.stopScheduler()
       if (this.messageQueue.length > 0) {
         console.log('Processing pending messages: ' + this.messageQueue.length)
         await this.processMessageQueue()

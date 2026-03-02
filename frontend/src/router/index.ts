@@ -199,6 +199,36 @@ const router = createRouter({
           meta: { title: 'Disparo em Massa', roles: ['admin', 'supervisor'] }
         },
         {
+          path: 'campaigns',
+          name: 'campaigns',
+          component: () => import('@/views/CampaignsView.vue'),
+          meta: { title: 'Campanhas', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'campaigns/new',
+          name: 'campaign-new',
+          component: () => import('@/views/CampaignCreateView.vue'),
+          meta: { title: 'Nova Campanha', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'campaigns/:id',
+          name: 'campaign-detail',
+          component: () => import('@/views/CampaignDetailView.vue'),
+          meta: { title: 'Detalhes da Campanha', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'campaigns/:id/edit',
+          name: 'campaign-edit',
+          component: () => import('@/views/CampaignCreateView.vue'),
+          meta: { title: 'Editar Campanha', roles: ['admin', 'supervisor'] }
+        },
+        {
+          path: 'hsm-templates',
+          name: 'hsm-templates',
+          component: () => import('@/views/HsmTemplatesView.vue'),
+          meta: { title: 'Templates HSM', roles: ['admin', 'supervisor'] }
+        },
+        {
           path: 'bot-builder',
           name: 'bot-builder-list',
           component: () => import('@/views/BotBuilderListView.vue'),

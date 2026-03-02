@@ -742,4 +742,60 @@ export const whatsappFeaturesApi = {
     apiClient.post('/api/whatsapp/features/broadcast', payload),
 }
 
+// ============================================
+// CAMPANHAS & HSM TEMPLATES
+// ============================================
+
+export const hsmTemplatesApi = {
+  list: (params?: { page?: number; limit?: number; status?: string; category?: string; instanceId?: string }) =>
+    apiClient.get('/api/hsm-templates', params as Record<string, unknown>),
+  getById: (id: string) =>
+    apiClient.get(`/api/hsm-templates/${id}`),
+  create: (data: any) =>
+    apiClient.post('/api/hsm-templates', data),
+  update: (id: string, data: any) =>
+    apiClient.put(`/api/hsm-templates/${id}`, data),
+  delete: (id: string) =>
+    apiClient.delete(`/api/hsm-templates/${id}`),
+  syncFromMeta: (instanceId: string, wabaId?: string) =>
+    apiClient.post(`/api/hsm-templates/sync/${instanceId}`, { wabaId }),
+  submitToMeta: (id: string) =>
+    apiClient.post(`/api/hsm-templates/${id}/submit`),
+  deleteFromMeta: (id: string) =>
+    apiClient.delete(`/api/hsm-templates/${id}/meta`),
+  preview: (id: string, variables?: Record<string, string>) =>
+    apiClient.post(`/api/hsm-templates/${id}/preview`, { variables }),
+}
+
+export const campaignsApi = {
+  list: (params?: { page?: number; limit?: number; status?: string; type?: string }) =>
+    apiClient.get('/api/campaigns', params as Record<string, unknown>),
+  getById: (id: string) =>
+    apiClient.get(`/api/campaigns/${id}`),
+  create: (data: any) =>
+    apiClient.post('/api/campaigns', data),
+  update: (id: string, data: any) =>
+    apiClient.put(`/api/campaigns/${id}`, data),
+  delete: (id: string) =>
+    apiClient.delete(`/api/campaigns/${id}`),
+  duplicate: (id: string) =>
+    apiClient.post(`/api/campaigns/${id}/duplicate`),
+  schedule: (id: string, scheduledAt: string) =>
+    apiClient.post(`/api/campaigns/${id}/schedule`, { scheduledAt }),
+  start: (id: string) =>
+    apiClient.post(`/api/campaigns/${id}/start`),
+  pause: (id: string) =>
+    apiClient.put(`/api/campaigns/${id}/pause`),
+  resume: (id: string) =>
+    apiClient.put(`/api/campaigns/${id}/resume`),
+  cancel: (id: string) =>
+    apiClient.put(`/api/campaigns/${id}/cancel`),
+  getMetrics: (id: string) =>
+    apiClient.get(`/api/campaigns/${id}/metrics`),
+  getContacts: (id: string, params?: { page?: number; limit?: number; status?: string }) =>
+    apiClient.get(`/api/campaigns/${id}/contacts`, params as Record<string, unknown>),
+  exportContacts: (id: string) =>
+    apiClient.download(`/api/campaigns/${id}/export`),
+}
+
 export { apiClient }
