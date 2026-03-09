@@ -526,6 +526,28 @@ export const iaApi = {
     apiClient.get<{ voices: Array<{ voiceId: string; name: string; category: string; previewUrl?: string }> }>('/api/ia/elevenlabs-voices'),
   generateBot: (prompt: string) =>
     apiClient.post<{ nodes: any[]; edges: any[] }>('/api/ia/generate-bot', { prompt }, { timeout: 180000 }),
+  getAgentConfig: () =>
+    apiClient.get<{
+      agentEnabled: boolean
+      agentSystemPrompt: string
+      agentModel: string
+      agentTemperature: number
+      agentMaxTokens: number
+      agentHistoryLimit: number
+      agentTransferKeywords: string[]
+      agentTransferInstructions: string
+    }>('/api/ia/agent-config'),
+  saveAgentConfig: (config: {
+    agentEnabled?: boolean
+    agentSystemPrompt?: string
+    agentModel?: string
+    agentTemperature?: number
+    agentMaxTokens?: number
+    agentHistoryLimit?: number
+    agentTransferKeywords?: string[]
+    agentTransferInstructions?: string
+  }) =>
+    apiClient.put('/api/ia/agent-config', config),
 }
 
 export const visualBotsApi = {

@@ -61,4 +61,10 @@ router.get('/config', controller.getConfig)
 // Atualiza configuracoes da IA
 router.put('/config', controller.saveConfig)
 
+// Busca configuracoes do AI Agent
+router.get('/agent-config', controller.getAgentConfig)
+
+// Atualiza configuracoes do AI Agent
+router.put('/agent-config', controller.saveAgentConfig)
+
 export default router

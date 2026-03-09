@@ -1,10 +1,10 @@
 import EventEmitter from 'events'
 import {
-  IgApiClient,
   IgCheckpointError,
   IgLoginTwoFactorRequiredError,
 } from 'instagram-private-api'
 import {
+  IgApiClientExt,
   withFbnsAndRealtime,
   GraphQLSubscriptions,
   SkywalkerSubscriptions,
@@ -46,6 +46,7 @@ interface InstanceData {
   pendingTwoFactor?: PendingTwoFactor
   pendingCheckpoint?: boolean
   seenItemIds: Set<string>
+  userThreadMap: Map<string, string> // userId → threadId
 }
 
 class InstagramPrivateManager extends EventEmitter {
@@ -66,8 +67,14 @@ class InstagramPrivateManager extends EventEmitter {
   /**
    * Cria um IgApiClient base (sem realtime)
    */
-  private createBaseClient(username: string): IgApiClient {
-    const ig = new IgApiClient()
+  private createBaseClient(username: string): IgApiClientExt {
+    const ig = new IgApiClientExt()
+    ;(ig.state as any).constants = {
+      ...(ig.state as any).constants,
+      APP_VERSION: '317.0.0.34.109',
+      APP_VERSION_CODE: '562016793',
+      BLOKS_VERSION_ID: 'dc8e498e9028b19b2c49b0c0b4e6f31df6cf66e972e34e4cf7c2996e315aa4d7',
+    }
     ig.state.generateDevice(username)
     return ig
   }
@@ -75,7 +82,7 @@ class InstagramPrivateManager extends EventEmitter {
   /**
    * Aplica o mixin de realtime/exportState após o login
    */
-  private applyRealtimeMixin(ig: IgApiClient): any {
+  private applyRealtimeMixin(ig: IgApiClientExt): any {
     return withFbnsAndRealtime(ig)
   }
 
@@ -110,17 +117,18 @@ class InstagramPrivateManager extends EventEmitter {
     const baseIg = this.createBaseClient(config.username)
 
     try {
-      // Restaura cookies/state manualmente antes de aplicar o mixin
-      await baseIg.state.deserialize(JSON.parse(config.sessionData))
-
-      // Aplica o mixin depois de restaurar o state
+      // Aplica o mixin ANTES de restaurar o state, para registrar os hooks de FBNS
       const ig = this.applyRealtimeMixin(baseIg)
+
+      // importState aceita string ou objeto — sessionData pode estar em ambos formatos
+      await ig.importState(config.sessionData)
 
       const instanceData: InstanceData = {
         ig,
         status: 'connecting',
         config,
         seenItemIds: new Set(),
+        userThreadMap: new Map(),
       }
       this.instances.set(sessionName, instanceData)
 
@@ -159,6 +167,7 @@ class InstagramPrivateManager extends EventEmitter {
       status: 'connecting',
       config,
       seenItemIds: new Set(),
+        userThreadMap: new Map(),
     }
     this.instances.set(sessionName, instanceData)
 
@@ -349,14 +358,29 @@ class InstagramPrivateManager extends EventEmitter {
         try { await ig.realtime.disconnect() } catch (_) {}
       }
 
-      ig.realtime.on('receive', async (topic: any, messages: any) => {
+      ig.realtime.on('message', async (data: any) => {
+        console.log(`📩 [${config.name}] DM recebida (message event):`, JSON.stringify(data).substring(0, 300))
+        try {
+          await this.processRealtimeMessage(sessionName, 'message', data)
+        } catch (e) {
+          console.error(`❌ [${config.name}] Erro ao processar msg realtime:`, e)
+        }
+      })
+
+      ig.realtime.on('direct', async (data: any) => {
+        console.log(`📩 [${config.name}] DM recebida (direct event):`, JSON.stringify(data).substring(0, 300))
+        try {
+          await this.processDirectEvent(sessionName, data)
+        } catch (e) {
+          console.error(`❌ [${config.name}] Erro ao processar direct event:`, e)
+        }
+      })
+
+      // Log de todos os eventos recebidos para debug
+      ig.realtime.on('receive', (_topic: any, messages: any) => {
         const msgList = Array.isArray(messages) ? messages : [messages]
-        for (const msg of msgList) {
-          try {
-            await this.processRealtimeMessage(sessionName, String(topic), msg)
-          } catch (e) {
-            console.error(`❌ [${config.name}] Erro ao processar msg realtime:`, e)
-          }
+        for (const m of msgList) {
+          console.log(`📡 [${config.name}] receive event:`, JSON.stringify(m?.data || m).substring(0, 300))
         }
       })
 
@@ -372,12 +396,28 @@ class InstagramPrivateManager extends EventEmitter {
         console.log(`📨 [${config.name}] FBNS push:`, notification?.collapseKey)
       })
 
-      // irisData é opcional — se a inbox retornar 400, conecta sem ela
+      // Busca seq_id do inbox — necessário para iris (recebimento de DMs)
       let irisData: any = undefined
       try {
         irisData = await ig.feed.directInbox().request()
+        console.log(`📡 [${config.name}] Inbox OK (seq_id: ${irisData?.seq_id})`)
       } catch (inboxErr: any) {
-        console.warn(`⚠️ [${config.name}] Inbox falhou (${inboxErr.message}) — conectando MQTT sem irisData`)
+        console.warn(`⚠️ [${config.name}] Inbox falhou (${inboxErr?.response?.statusCode || inboxErr.message})`)
+        // Tenta com versão 222 temporariamente
+        const saved = { ...(ig.state as any).constants }
+        try {
+          ;(ig.state as any).constants = {
+            ...saved,
+            APP_VERSION: '222.0.0.13.114',
+            APP_VERSION_CODE: '350696709',
+          }
+          irisData = await ig.feed.directInbox().request()
+          console.log(`📡 [${config.name}] Inbox OK com v222 (seq_id: ${irisData?.seq_id})`)
+        } catch (e: any) {
+          console.warn(`⚠️ [${config.name}] Inbox v222 também falhou (${e?.response?.statusCode || e.message})`)
+        } finally {
+          ;(ig.state as any).constants = saved
+        }
       }
 
       await ig.realtime.connect({
@@ -402,36 +442,80 @@ class InstagramPrivateManager extends EventEmitter {
   }
 
   /**
-   * Processa mensagens recebidas via MQTT/realtime
+   * Processa eventos 'direct' (via GraphQL/Skywalker — não depende do iris)
    */
-  private async processRealtimeMessage(
-    sessionName: string,
-    _topic: string,
-    msg: any,
-  ): Promise<void> {
-    const data = this.instances.get(sessionName)
-    if (!data) return
+  private async processDirectEvent(sessionName: string, data: any): Promise<void> {
+    const instance = this.instances.get(sessionName)
+    if (!instance) return
 
-    // Mensagens de DM chegam com op='add' e path contendo /direct_v2/threads/
-    if (msg?.op !== 'add' || !msg?.path?.includes('/direct_v2/threads/')) return
+    // Formato: { op: 'add', path: '/direct_v2/threads/...', value: { item_id, ... } }
+    if (data?.op !== 'add' || !data?.path?.includes('/direct_v2/threads/')) return
 
-    const value = msg.value
+    const value = data.value
     if (!value?.item_id) return
 
-    // Evita processar a mesma mensagem duas vezes
-    if (data.seenItemIds.has(value.item_id)) return
-    data.seenItemIds.add(value.item_id)
+    if (instance.seenItemIds.has(value.item_id)) return
+    instance.seenItemIds.add(value.item_id)
 
-    // Ignora mensagens enviadas pela própria conta
-    const myUserId = data.ig.state.cookieUserId
+    const myUserId = instance.ig.state.cookieUserId
     if (String(value.user_id) === String(myUserId)) return
 
-    const incoming = this.normalizeRealtimeItem(value, sessionName, data.config.name)
+    // Extrai thread_id do path
+    const threadMatch = data.path.match(/\/direct_v2\/threads\/(\d+)/)
+    if (threadMatch && value.user_id) {
+      instance.userThreadMap.set(String(value.user_id), threadMatch[1])
+    }
+
+    const incoming = this.normalizeRealtimeItem(value, sessionName, instance.config.name)
     if (!incoming) return
 
     this.emit('message', {
       sessionName,
-      instanceName: data.config.name,
+      instanceName: instance.config.name,
+      message: incoming,
+    })
+  }
+
+  /**
+   * Processa mensagens recebidas via MQTT/realtime (evento 'message' do iris)
+   */
+  private async processRealtimeMessage(
+    sessionName: string,
+    _topic: string,
+    data: any,
+  ): Promise<void> {
+    const instance = this.instances.get(sessionName)
+    if (!instance) return
+
+    const msg = data?.message
+    if (!msg) return
+
+    // Filtra DMs — aceita tanto formato antigo (op='add') quanto novo (delta_type)
+    const isNewMessage = msg.op === 'add' || data.delta_type === 'deltaNewMessage'
+    if (!isNewMessage || !msg.path?.includes('/direct_v2/threads/')) return
+    if (!msg.item_id) return
+
+    // Evita processar a mesma mensagem duas vezes
+    if (instance.seenItemIds.has(msg.item_id)) return
+    instance.seenItemIds.add(msg.item_id)
+
+    // Ignora mensagens enviadas pela própria conta
+    const myUserId = instance.ig.state.cookieUserId
+    if (String(msg.user_id) === String(myUserId)) return
+
+    // Mapeia userId → threadId para usar no envio de respostas
+    if (msg.thread_id && msg.user_id) {
+      instance.userThreadMap.set(String(msg.user_id), String(msg.thread_id))
+    }
+
+    console.log(`📨 [${instance.config.name}] DM processada: type=${msg.item_type}, user=${msg.user_id}, thread=${msg.thread_id}`)
+
+    const incoming = this.normalizeRealtimeItem(msg, sessionName, instance.config.name)
+    if (!incoming) return
+
+    this.emit('message', {
+      sessionName,
+      instanceName: instance.config.name,
       message: incoming,
     })
   }
@@ -466,6 +550,7 @@ class InstagramPrivateManager extends EventEmitter {
           text = ''
           type = 'audio'
           mediaUrl = item.voice_media?.media?.audio?.audio_src
+          console.log(`🎤 voice_media structure:`, JSON.stringify(item.voice_media).substring(0, 500))
           break
         case 'animated_media':
           text = ''
@@ -504,11 +589,15 @@ class InstagramPrivateManager extends EventEmitter {
     const data = this.instances.get(sessionName)
     if (!data?.ig) throw new Error(`Instância ${sessionName} não conectada`)
 
-    // Cria/obtém thread com o usuário, depois envia
-    const threadResult = await data.ig.direct.createGroupThread([parseInt(userId, 10)])
-    const threadId: string = threadResult.thread_id
-    const result = await data.ig.entity.directThread(threadId).broadcastText(text)
+    // Envia via MQTT se temos threadId, senão fallback HTTP
+    const threadId = data.userThreadMap.get(userId)
+    if (threadId && data.ig.realtime?.direct) {
+      await data.ig.realtime.direct.sendText({ threadId, text })
+      return { idMessage: `mqtt_${Date.now()}` }
+    }
 
+    const threadResult = await data.ig.direct.createGroupThread([parseInt(userId, 10)])
+    const result = await data.ig.entity.directThread(threadResult.thread_id).broadcastText(text)
     return { idMessage: result?.payload?.item_id || '' }
   }
 
@@ -524,11 +613,14 @@ class InstagramPrivateManager extends EventEmitter {
     const data = this.instances.get(sessionName)
     if (!data?.ig) throw new Error(`Instância ${sessionName} não conectada`)
 
-    const threadResult = await data.ig.direct.createGroupThread([parseInt(userId, 10)])
-    const threadId: string = threadResult.thread_id
-    // Envia como link pois URLs externas não podem ser enviadas como mídia direta
-    const result = await data.ig.entity.directThread(threadId).broadcastLink(mediaUrl, [mediaUrl])
+    const threadId = data.userThreadMap.get(userId)
+    if (threadId && data.ig.realtime?.direct) {
+      await data.ig.realtime.direct.sendText({ threadId, text: mediaUrl })
+      return { idMessage: `mqtt_${Date.now()}` }
+    }
 
+    const threadResult = await data.ig.direct.createGroupThread([parseInt(userId, 10)])
+    const result = await data.ig.entity.directThread(threadResult.thread_id).broadcastLink(mediaUrl, [mediaUrl])
     return { idMessage: result?.payload?.item_id || '' }
   }
 
@@ -613,11 +705,10 @@ class InstagramPrivateManager extends EventEmitter {
     extra?: Partial<IInstagramPrivateInstance>,
   ): Promise<void> {
     try {
-      // exportState vem do mixin withFbnsAndRealtime; fallback para state.serialize
-      const state = typeof ig.exportState === 'function'
+      // exportState (do IgApiClientExt) já retorna uma string JSON
+      const sessionData = typeof ig.exportState === 'function'
         ? await ig.exportState()
-        : await ig.state.serialize()
-      const sessionData = JSON.stringify(state)
+        : JSON.stringify(await ig.state.serialize())
       await instagramPrivateInstanceRepository.updateSessionData(sessionName, sessionData)
       if (extra) {
         await instagramPrivateInstanceRepository.updateStatus(sessionName, 'connected', extra)

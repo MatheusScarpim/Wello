@@ -51,7 +51,7 @@ async function fetchSettings() {
       settings.value = getDefaultSettings()
     }
   } catch {
-    toast.error('Erro ao carregar configuracoes de disponibilidade')
+    toast.error('Erro ao carregar configurações de disponibilidade')
     settings.value = getDefaultSettings()
   } finally {
     isLoading.value = false
@@ -63,9 +63,9 @@ async function handleSave() {
   isSaving.value = true
   try {
     await availabilityApi.update(settings.value)
-    toast.success('Configuracoes salvas com sucesso')
+    toast.success('Configurações salvas com sucesso')
   } catch {
-    toast.error('Erro ao salvar configuracoes')
+    toast.error('Erro ao salvar configurações')
   } finally {
     isSaving.value = false
   }
@@ -260,7 +260,7 @@ onMounted(fetchSettings)
         >
           <LoadingSpinner v-if="isSaving" size="sm" />
           <Save v-else class="w-4 h-4" />
-          Salvar Configuracoes
+          Salvar Configurações
         </button>
       </div>
     </template>

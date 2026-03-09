@@ -16,6 +16,7 @@ import { ContactService } from './ContactService'
 import finalizationService from './FinalizationService'
 import { webhookDispatcher } from './WebhookDispatcher'
 import fairDistributionService from '@/core/fairDistribution/FairDistributionService'
+import BotSessionRepository from '@/core/repositories/BotSessionRepository'
 
 export interface TransferConversationsParams {
   sourceInstanceId: string
@@ -996,8 +997,13 @@ export class ConversationService {
       )
     })
 
-    // Enviar mensagem de assumir
+    // Desativar sessão de bot ao atribuir operador (impede IA de responder)
     const conversation = await this.repository.findById(objectId)
+    if (conversation?.identifier) {
+      BotSessionRepository.endSession(conversation.identifier).catch(() => {})
+    }
+
+    // Enviar mensagem de assumir
     if (conversation && !options?.suppressAutomaticMessage) {
       setImmediate(() => {
         this.sendAutomaticMessage(conversation, 'assign', {
@@ -1011,8 +1017,10 @@ export class ConversationService {
     return result
   }
 
-  async removeOperator(id: string) {
+  async removeOperator(id: string, status?: string) {
     const objectId = ObjectId.isValid(id) ? new ObjectId(id) : id
+    const $set: Record<string, any> = { updatedAt: new Date() }
+    if (status) $set.status = status
     const result = await this.repository.updateOne({ _id: objectId } as any, {
       $unset: {
         operatorId: '',
@@ -1023,9 +1031,7 @@ export class ConversationService {
         offerExpiresAt: '',
         offerAttempt: '',
       },
-      $set: {
-        updatedAt: new Date(),
-      },
+      $set,
     })
 
     setImmediate(() => {

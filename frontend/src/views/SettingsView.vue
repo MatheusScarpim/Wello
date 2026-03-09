@@ -232,7 +232,7 @@ onUnmounted(() => {
 
           <router-link to="/whatsapp" class="btn-outline">
             <ExternalLink class="w-4 h-4" />
-            Gerenciar Instancias
+            Gerenciar Instâncias
           </router-link>
         </div>
 

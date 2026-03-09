@@ -311,4 +311,24 @@ export class IaController extends BaseController {
 
     this.sendSuccess(res, config, 'Configuracoes salvas com sucesso')
   })
+
+  /**
+   * GET /api/ia/agent-config
+   * Retorna configuracoes do AI Agent
+   */
+  public getAgentConfig = this.asyncHandler(async (req: Request, res: Response) => {
+    const config = await this.iaService.getAgentConfig()
+
+    this.sendSuccess(res, config, 'Configuracoes do agente recuperadas com sucesso')
+  })
+
+  /**
+   * PUT /api/ia/agent-config
+   * Atualiza configuracoes do AI Agent
+   */
+  public saveAgentConfig = this.asyncHandler(async (req: Request, res: Response) => {
+    const config = await this.iaService.saveAgentConfig(req.body)
+
+    this.sendSuccess(res, config, 'Configuracoes do agente salvas com sucesso')
+  })
 }

@@ -11,12 +11,14 @@ import {
   type NotificationEventType,
 } from '@/services/notifications'
 import { useNotificationStore } from '@/stores/notifications'
+import { useQueueStore } from '@/stores/queue'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const uiStore = useUiStore()
 const notificationStore = useNotificationStore()
+const queueStore = useQueueStore()
 
 const handleSystemNotification = (event: Event) => {
   const detail = (event as CustomEvent<{
@@ -67,10 +69,12 @@ const showHeader = computed(() => {
 
 onMounted(() => {
   window.addEventListener(SYSTEM_NOTIFICATION_EVENT, handleSystemNotification)
+  queueStore.startPolling()
 })
 
 onUnmounted(() => {
   window.removeEventListener(SYSTEM_NOTIFICATION_EVENT, handleSystemNotification)
+  queueStore.stopPolling()
 })
 </script>
 

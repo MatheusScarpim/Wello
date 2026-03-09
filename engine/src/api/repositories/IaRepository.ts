@@ -11,6 +11,16 @@ export interface IaConfigDocument extends Document {
   temperature?: number
   maxTokens?: number
   systemPrompt?: string
+  // AI Agent config
+  agentEnabled?: boolean
+  agentSystemPrompt?: string
+  agentModel?: string
+  agentTemperature?: number
+  agentMaxTokens?: number
+  agentHistoryLimit?: number
+  agentTransferKeywords?: string[]
+  agentTransferInstructions?: string
+  agentReplyWithAudio?: boolean
   createdAt: Date
   updatedAt: Date
 }

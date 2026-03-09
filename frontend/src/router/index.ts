@@ -136,7 +136,7 @@ const router = createRouter({
           path: 'canned-responses',
           name: 'canned-responses',
           component: () => import('@/views/CannedResponsesView.vue'),
-          meta: { title: 'Respostas Rapidas', roles: ['admin', 'supervisor'] }
+          meta: { title: 'Respostas Rápidas', roles: ['admin', 'supervisor'] }
         },
         {
           path: 'finalization-metrics',
@@ -157,10 +157,16 @@ const router = createRouter({
           meta: { title: 'Assistente IA', roles: ['admin', 'supervisor'] }
         },
         {
+          path: 'ai-agent',
+          name: 'ai-agent',
+          component: () => import('@/views/AiAgentView.vue'),
+          meta: { title: 'Agente IA', roles: ['admin', 'supervisor'] }
+        },
+        {
           path: 'whatsapp',
           name: 'whatsapp',
           component: () => import('@/views/WhatsAppView.vue'),
-          meta: { title: 'Instancias', roles: ['admin', 'supervisor'] }
+          meta: { title: 'Instâncias', roles: ['admin', 'supervisor'] }
         },
         {
           path: 'pipeline',

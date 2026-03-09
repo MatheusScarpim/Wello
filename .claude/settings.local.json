@@ -24,7 +24,12 @@
       "Bash(node node_modules/.bin/tsc:*)",
       "Bash(find:*)",
       "Bash(npx tsc:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(xargs head -100)",
+      "Bash(grep '\"\"version\"\"')",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

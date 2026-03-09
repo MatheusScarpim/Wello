@@ -290,6 +290,24 @@ async function transcribeAudio(msgId: string, mediaUrl: string) {
   }
 }
 
+/**
+ * Retorna a transcrição de um áudio, verificando:
+ * 1. Transcrição automática do backend (campo message com prefixo 🎤)
+ * 2. Transcrição manual feita pelo operador (audioTranscriptions map)
+ */
+function getAudioTranscription(message: any): string | null {
+  // Verificar transcrição manual primeiro (mais recente)
+  const manual = audioTranscriptions.value.get(message._id)
+  if (manual) return manual
+
+  // Verificar transcrição automática do backend (salva no campo message)
+  if (message.message && message.message.startsWith('🎤 ')) {
+    return message.message.substring(3)
+  }
+
+  return null
+}
+
 // Audio preview (after recording / selecting file)
 const previewAudio = ref<HTMLAudioElement | null>(null)
 const previewPlaying = ref(false)
@@ -2064,14 +2082,14 @@ onUnmounted(() => {
                   <Mic class="w-3 h-3" :class="message.direction === 'outgoing' ? 'text-white/70' : 'text-gray-400'" />
                 </div>
               </div>
-              <!-- Transcription -->
-              <div v-if="audioTranscriptions.get(message._id)" class="mt-1.5 text-xs leading-relaxed"
+              <!-- Transcription (auto from backend or manual) -->
+              <div v-if="getAudioTranscription(message)" class="mt-1.5 text-xs leading-relaxed"
                 :class="message.direction === 'outgoing' ? 'text-white/80' : 'text-gray-600'">
-                {{ audioTranscriptions.get(message._id) }}
+                {{ getAudioTranscription(message) }}
               </div>
-              <!-- Transcribe button -->
+              <!-- Transcribe button (hidden if already transcribed) -->
               <button
-                v-if="!audioTranscriptions.get(message._id)"
+                v-if="!getAudioTranscription(message)"
                 @click="transcribeAudio(message._id, message.mediaUrl!)"
                 :disabled="transcribingIds.has(message._id)"
                 class="mt-1 flex items-center gap-1 text-[10px] font-medium transition-colors"
@@ -2209,7 +2227,7 @@ onUnmounted(() => {
             >
               <strong class="font-bold">{{ conversation?.name || conversation?.identifier || 'Cliente' }}</strong>
             </p>
-            <p v-if="message.message && message.type !== 'contact' && message.type !== 'vcard' && message.type !== 'list' && message.type !== 'buttons'" class="text-sm whitespace-pre-wrap break-words leading-relaxed">{{ message.message }}</p>
+            <p v-if="message.message && message.type !== 'contact' && message.type !== 'vcard' && message.type !== 'list' && message.type !== 'buttons' && !((['audio', 'ptt'].includes(message.type)) && message.message.startsWith('🎤 '))" class="text-sm whitespace-pre-wrap break-words leading-relaxed">{{ message.message }}</p>
 
             <div v-if="getAuraPayload(message)" class="mt-1.5">
               <AuraResponseCard :response="getAuraPayload(message)!" />
@@ -2738,7 +2756,7 @@ onUnmounted(() => {
             @click="showCannedResponses = !showCannedResponses"
             class="w-12 h-12 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-primary-600 active:scale-95 transition-all flex-shrink-0"
             :class="showCannedResponses ? 'bg-primary-50 text-primary-600 border-primary-200' : ''"
-            title="Respostas Rapidas"
+            title="Respostas Rápidas"
           >
             <Zap class="w-5 h-5" />
           </button>

@@ -51,7 +51,7 @@ async function fetchData() {
     if (resResp.data) responses.value = resResp.data
     if (resDept.data) departments.value = resDept.data
   } catch {
-    toast.error('Erro ao carregar respostas rapidas')
+    toast.error('Erro ao carregar respostas rápidas')
   } finally {
     isLoading.value = false
   }
@@ -160,7 +160,7 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Respostas Rapidas</h1>
+        <h1 class="text-2xl font-bold text-gray-900">Respostas Rápidas</h1>
         <p class="text-gray-500">Gerencie atalhos de mensagens para agilizar o atendimento.</p>
       </div>
       <button @click="fetchData" class="btn-outline">

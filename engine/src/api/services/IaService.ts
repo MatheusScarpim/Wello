@@ -1147,4 +1147,37 @@ REGRAS:
   async saveConfig(config: any) {
     return await this.iaRepository.saveConfig(config)
   }
+
+  // ======================================================
+  // AI Agent Config
+  // ======================================================
+
+  async getAgentConfig() {
+    const config = await this.iaRepository.getConfig()
+    return {
+      agentEnabled: config?.agentEnabled ?? false,
+      agentSystemPrompt: config?.agentSystemPrompt || '',
+      agentModel: config?.agentModel || 'gpt-4o-mini',
+      agentTemperature: config?.agentTemperature ?? 0.8,
+      agentMaxTokens: config?.agentMaxTokens ?? 400,
+      agentHistoryLimit: config?.agentHistoryLimit ?? 30,
+      agentTransferKeywords: config?.agentTransferKeywords || [],
+      agentTransferInstructions: config?.agentTransferInstructions || '',
+      agentReplyWithAudio: config?.agentReplyWithAudio ?? false,
+    }
+  }
+
+  async saveAgentConfig(agentConfig: {
+    agentEnabled?: boolean
+    agentSystemPrompt?: string
+    agentModel?: string
+    agentTemperature?: number
+    agentMaxTokens?: number
+    agentHistoryLimit?: number
+    agentTransferKeywords?: string[]
+    agentTransferInstructions?: string
+    agentReplyWithAudio?: boolean
+  }) {
+    return await this.iaRepository.saveConfig(agentConfig)
+  }
 }

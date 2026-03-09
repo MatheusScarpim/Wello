@@ -4,6 +4,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import { useUiStore } from '@/stores/ui'
 import { useWhitelabelStore } from '@/stores/whitelabel'
 import { useAuthStore } from '@/stores/auth'
+import { useQueueStore } from '@/stores/queue'
 import {
   LayoutDashboard,
   MessageSquare,
@@ -34,13 +35,15 @@ import {
   Briefcase,
   UserCircle,
   FileText,
-  Send
+  Send,
+  BrainCircuit
 } from 'lucide-vue-next'
 
 const route = useRoute()
 const uiStore = useUiStore()
 const whitelabelStore = useWhitelabelStore()
 const authStore = useAuthStore()
+const queueStore = useQueueStore()
 
 const decodeRoleFromToken = (token: string | null | undefined): string | null => {
   if (!token) return null
@@ -75,7 +78,7 @@ const navGroups = computed<NavGroup[]>(() => {
       {
         title: 'Atendimento',
         items: [
-          { name: 'Assumir', path: '/assumir', icon: UserCheck },
+          { name: 'Assumir', path: '/assumir', icon: UserCheck, badge: queueStore.waitingCount || undefined },
           { name: 'Conversas', path: '/conversations', icon: MessageSquare },
         ]
       },
@@ -94,7 +97,7 @@ const navGroups = computed<NavGroup[]>(() => {
           items: [
             { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
             { name: 'Métricas', path: '/metricas', icon: BarChart3 },
-            { name: 'Assumir', path: '/assumir', icon: UserCheck },
+            { name: 'Assumir', path: '/assumir', icon: UserCheck, badge: queueStore.waitingCount || undefined },
             { name: 'Conversas', path: '/conversations', icon: MessageSquare },
             { name: 'Todas Conversas', path: '/all-conversations', icon: ListFilter },
             { name: 'Arquivadas', path: '/all-conversations?archived=true', icon: Archive },
@@ -137,6 +140,7 @@ const navGroups = computed<NavGroup[]>(() => {
       title: 'IA',
       items: [
         { name: 'Assistente IA', path: '/ia', icon: Sparkles },
+        { name: 'Agente IA', path: '/ai-agent', icon: BrainCircuit },
       ]
     },
         {
@@ -257,29 +261,39 @@ const sidebarClasses = computed(() => {
               :key="item.path"
               :to="item.path"
               @click="uiStore.closeSidebar"
-              class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors"
+              class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors relative"
               :class="[
                 isActive(item.path)
                   ? 'bg-primary-50 text-primary-700'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               ]"
             >
-              <component
-                :is="item.icon"
-                class="w-5 h-5 flex-shrink-0"
-                :class="[
-                  isActive(item.path) ? 'text-primary-600' : 'text-gray-400'
-                ]"
-              />
+              <div class="relative flex-shrink-0">
+                <component
+                  :is="item.icon"
+                  class="w-5 h-5"
+                  :class="[
+                    isActive(item.path) ? 'text-primary-600' : 'text-gray-400'
+                  ]"
+                />
+                <!-- Badge dot when sidebar is collapsed -->
+                <span
+                  v-if="item.badge && uiStore.sidebarCollapsed && !uiStore.isMobile"
+                  class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-sm"
+                >
+                  {{ item.badge > 9 ? '9+' : item.badge }}
+                </span>
+              </div>
               <span
                 v-if="!uiStore.sidebarCollapsed || uiStore.isMobile"
                 class="font-medium flex-1"
               >
                 {{ item.name }}
               </span>
+              <!-- Badge pill when sidebar is expanded -->
               <span
                 v-if="item.badge && (!uiStore.sidebarCollapsed || uiStore.isMobile)"
-                class="px-2 py-0.5 text-xs font-medium rounded-full bg-primary-100 text-primary-700"
+                class="min-w-[22px] h-[22px] flex items-center justify-center px-1.5 text-[11px] font-bold rounded-full bg-red-500 text-white shadow-sm animate-pulse"
               >
                 {{ item.badge }}
               </span>

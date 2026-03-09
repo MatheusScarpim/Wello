@@ -5,7 +5,7 @@
 
 ## O QUE É O SCARLATCHAT?
 
-O **ScarlatChat** é uma plataforma empresarial completa de atendimento ao cliente via **WhatsApp, Instagram e Telegram**, com **Inteligência Artificial integrada nativa**. Ela centraliza toda a operação de comunicação da empresa em um único painel — com automação, múltiplos atendentes, relatórios em tempo real e recursos de IA que reduzem o esforço humano e aumentam a velocidade de resposta.
+O **ScarlatChat** é um      a plataforma empresarial completa de atendimento ao cliente via **WhatsApp, Instagram e Telegram**, com **Inteligência Artificial integrada nativa**. Ela centraliza toda a operação de comunicação da empresa em um único painel — com automação, múltiplos atendentes, relatórios em tempo real e recursos de IA que reduzem o esforço humano e aumentam a velocidade de resposta.
 
 > Pense no ScarlatChat como um **"call center multicanal"** — WhatsApp, Instagram e Telegram em um só lugar, com IA trabalhando ao lado de cada atendente.
 

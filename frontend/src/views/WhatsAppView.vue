@@ -128,7 +128,7 @@ async function fetchInstances() {
       instances.value = response.data as WhatsAppInstance[]
     }
   } catch (err: any) {
-    error.value = err.message || 'Erro ao buscar instancias'
+    error.value = err.message || 'Erro ao buscar instâncias'
   } finally {
     isLoading.value = false
   }
@@ -190,7 +190,7 @@ async function fetchBots() {
 
 async function createInstance() {
   if (!newInstanceForm.value.name.trim()) {
-    toast.error('Nome da instancia e obrigatorio')
+    toast.error('Nome da instância e obrigatório')
     return
   }
 
@@ -222,7 +222,7 @@ async function createInstance() {
     const response = await whatsappInstancesApi.create(newInstanceForm.value)
     if (response.data) {
       instances.value.push(response.data as WhatsAppInstance)
-      toast.success('Instancia criada com sucesso!')
+      toast.success('Instância criada com sucesso!')
       showCreateModal.value = false
       newInstanceForm.value = {
         name: '',
@@ -248,7 +248,7 @@ async function createInstance() {
       }
     }
   } catch (err: any) {
-    toast.error(err.message || 'Erro ao criar instancia')
+    toast.error(err.message || 'Erro ao criar instância')
   } finally {
     isCreating.value = false
   }
@@ -294,7 +294,7 @@ async function connectInstance(id: string) {
 }
 
 async function disconnectInstance(id: string) {
-  if (!confirm('Tem certeza que deseja desconectar esta instancia?')) return
+  if (!confirm('Tem certeza que deseja desconectar esta instância?')) return
 
   disconnectingIds.value.add(id)
   try {
@@ -309,12 +309,12 @@ async function disconnectInstance(id: string) {
 }
 
 async function deleteInstance(id: string) {
-  if (!confirm('Tem certeza que deseja excluir esta instancia? Esta acao não pode ser desfeita.')) return
+  if (!confirm('Tem certeza que deseja excluir esta instância? Esta acao não pode ser desfeita.')) return
 
   try {
     await whatsappInstancesApi.delete(id)
     instances.value = instances.value.filter(i => i.id !== id)
-    toast.success('Instancia excluida')
+    toast.success('Instância excluída')
   } catch (err: any) {
     toast.error(err.message || 'Erro ao excluir')
   }
@@ -327,9 +327,9 @@ async function setDefault(id: string) {
       ...i,
       isDefault: i.id === id
     }))
-    toast.success('Instancia definida como padrao')
+    toast.success('Instância definida como padrão')
   } catch (err: any) {
-    toast.error(err.message || 'Erro ao definir padrao')
+    toast.error(err.message || 'Erro ao definir padrão')
   }
 }
 
@@ -342,7 +342,7 @@ async function toggleInstanceBot(instance: WhatsAppInstance) {
     instance.botEnabled = nextEnabled
     toast.success(`Bot ${nextEnabled ? 'ativado' : 'desativado'} para ${instance.name}`)
   } catch (err: any) {
-    toast.error(err.message || 'Erro ao atualizar bot da instancia')
+    toast.error(err.message || 'Erro ao atualizar bot da instância')
   } finally {
     updatingBotIds.value.delete(instance.id)
   }
@@ -371,7 +371,7 @@ async function setInstanceBot(instance: WhatsAppInstance, botId: string) {
     instance.botId = value
     toast.success(`Bot atualizado para ${instance.name}`)
   } catch (err: any) {
-    toast.error(err.message || 'Erro ao atualizar bot da instancia')
+    toast.error(err.message || 'Erro ao atualizar bot da instância')
   } finally {
     updatingBotIds.value.delete(instance.id)
   }
@@ -506,7 +506,7 @@ async function pollQrCode(id: string) {
     await fetchInstances()
     const instance = instances.value.find(i => i.id === id)
 
-    // Atualiza info da instancia no modal
+    // Atualiza info da instância no modal
     if (instance) {
       selectedInstance.value = instance
     }
@@ -785,12 +785,12 @@ onUnmounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Instancias</h1>
-        <p class="text-gray-500 mt-1">Gerencie suas instancias de canais</p>
+        <h1 class="text-2xl font-bold text-gray-900">Instâncias</h1>
+        <p class="text-gray-500 mt-1">Gerencie suas instâncias de canais</p>
       </div>
       <button v-if="activeTab === 'whatsapp'" @click="showCreateModal = true" class="btn-primary">
         <Plus class="w-4 h-4" />
-        Nova Instancia
+        Nova Instância
       </button>
       <button v-else @click="showCreateIgModal = true" class="btn-primary">
         <Plus class="w-4 h-4" />
@@ -867,7 +867,7 @@ onUnmounted(() => {
     <!-- Loading -->
     <div v-if="isLoading" class="card p-12 text-center">
       <Loader2 class="w-12 h-12 animate-spin text-primary-600 mx-auto" />
-      <p class="mt-4 text-gray-500">Carregando instancias...</p>
+      <p class="mt-4 text-gray-500">Carregando instâncias...</p>
     </div>
 
     <!-- Error -->
@@ -886,11 +886,11 @@ onUnmounted(() => {
       <div class="w-20 h-20 mx-auto rounded-full bg-gray-100 flex items-center justify-center">
         <Smartphone class="w-10 h-10 text-gray-400" />
       </div>
-      <h3 class="mt-4 text-lg font-medium text-gray-900">Nenhuma instancia</h3>
-      <p class="mt-2 text-gray-500">Crie sua primeira instancia para comecar</p>
+      <h3 class="mt-4 text-lg font-medium text-gray-900">Nenhuma instância</h3>
+      <p class="mt-2 text-gray-500">Crie sua primeira instância para começar</p>
       <button @click="showCreateModal = true" class="btn-primary mt-4">
         <Plus class="w-4 h-4" />
-        Criar Instancia
+        Criar Instância
       </button>
     </div>
 
@@ -931,7 +931,7 @@ onUnmounted(() => {
                   <Star
                     v-if="instance.isDefault"
                     class="w-4 h-4 text-yellow-500 fill-yellow-500"
-                    title="Instancia padrao"
+                    title="Instância padrão"
                   />
                 </div>
                 <p class="text-sm text-gray-500">
@@ -969,7 +969,7 @@ onUnmounted(() => {
           <!-- Bot Settings -->
           <div class="mt-4 p-3 bg-gray-50 rounded-lg">
             <div class="flex items-center justify-between">
-              <span class="text-sm text-gray-600">Bot nesta instancia</span>
+              <span class="text-sm text-gray-600">Bot nesta instância</span>
               <input
                 type="checkbox"
                 class="w-4 h-4"
@@ -1164,7 +1164,7 @@ onUnmounted(() => {
               v-if="!instance.isDefault"
               @click="setDefault(instance.id)"
               class="btn-sm btn-ghost"
-              title="Definir como padrao"
+              title="Definir como padrão"
             >
               <Star class="w-4 h-4" />
               Padrao
@@ -1175,7 +1175,7 @@ onUnmounted(() => {
               v-if="instances.length > 1"
               @click="openTransferModal(instance)"
               class="btn-sm btn-ghost"
-              title="Transferir conversas para outra instancia"
+              title="Transferir conversas para outra instância"
             >
               <ArrowRightLeft class="w-4 h-4" />
               Transferir
@@ -1185,7 +1185,7 @@ onUnmounted(() => {
             <button
               @click="deleteInstance(instance.id)"
               class="btn-sm btn-ghost text-red-600 hover:bg-red-50"
-              title="Excluir instancia"
+              title="Excluir instância"
             >
               <Trash2 class="w-4 h-4" />
             </button>
@@ -1200,19 +1200,19 @@ onUnmounted(() => {
       <ul class="space-y-2 text-gray-600">
         <li class="flex items-start gap-2">
           <CheckCircle2 class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-          <span>Cada instancia representa um numero de WhatsApp diferente</span>
+          <span>Cada instância representa um numero de WhatsApp diferente</span>
         </li>
         <li class="flex items-start gap-2">
           <CheckCircle2 class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-          <span>A instancia padrao sera usada para envios quando nenhuma for especificada</span>
+          <span>A instância padrão seráusada para envios quando nenhuma for especificada</span>
         </li>
         <li class="flex items-start gap-2">
           <AlertCircle class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-          <span>Mantenha os celulares conectados a internet para as instancias funcionarem</span>
+          <span>Mantenha os celulares conectados a internet para as instâncias funcionarem</span>
         </li>
         <li class="flex items-start gap-2">
           <AlertCircle class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-          <span>Ao desconectar uma instancia, sera necessario escanear o QR Code novamente</span>
+          <span>Ao desconectar uma instância, seránecessário escanear o QR Code novamente</span>
         </li>
       </ul>
     </div>
@@ -1272,7 +1272,7 @@ onUnmounted(() => {
         <Camera class="w-10 h-10 text-pink-400" />
       </div>
       <h3 class="mt-4 text-lg font-medium text-gray-900">Nenhuma conta Instagram</h3>
-      <p class="mt-2 text-gray-500">Conecte sua primeira conta Instagram para comecar</p>
+      <p class="mt-2 text-gray-500">Conecte sua primeira conta Instagram para começar</p>
       <button @click="showCreateIgModal = true" class="btn-primary mt-4">
         <Plus class="w-4 h-4" />
         Adicionar Conta
@@ -1416,7 +1416,7 @@ onUnmounted(() => {
         <div class="bg-white rounded-xl shadow-xl max-w-md w-full">
           <div class="p-6 border-b border-gray-200">
             <div class="flex items-center justify-between">
-              <h2 class="text-xl font-semibold text-gray-900">Nova Instancia</h2>
+              <h2 class="text-xl font-semibold text-gray-900">Nova Instância</h2>
               <button @click="showCreateModal = false" class="p-2 hover:bg-gray-100 rounded-lg">
                 <X class="w-5 h-5 text-gray-500" />
               </button>
@@ -1426,7 +1426,7 @@ onUnmounted(() => {
           <div class="p-6 space-y-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">
-                Nome da Instancia *
+                Nome da Instância *
               </label>
               <input
                 v-model="newInstanceForm.name"
@@ -1493,7 +1493,7 @@ onUnmounted(() => {
                 class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
               <label for="isDefault" class="text-sm text-gray-700">
-                Definir como instancia padrao
+                Definir como instância padrão
               </label>
             </div>
 
@@ -1550,7 +1550,7 @@ onUnmounted(() => {
             >
               <Loader2 v-if="isCreating" class="w-4 h-4 animate-spin" />
               <Plus v-else class="w-4 h-4" />
-              {{ isCreating ? 'Criando...' : 'Criar Instancia' }}
+              {{ isCreating ? 'Criando...' : 'Criar Instância' }}
             </button>
           </div>
         </div>
@@ -1779,7 +1779,7 @@ onUnmounted(() => {
             <!-- Target Instance -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">
-                Instancia de destino *
+                Instância de destino *
               </label>
               <select v-model="transferTargetId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                 <option value="">Selecione...</option>
@@ -1818,7 +1818,7 @@ onUnmounted(() => {
               <div class="flex items-start gap-2">
                 <AlertCircle class="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
                 <p class="text-sm text-yellow-800">
-                  As conversas transferidas passarao a enviar e receber mensagens pela instancia de destino.
+                  As conversas transferidas passarão a enviar e receber mensagens pela instância de destino.
                 </p>
               </div>
             </div>

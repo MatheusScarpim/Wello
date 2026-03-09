@@ -682,7 +682,7 @@ onMounted(fetchData)
             <div class="border-t border-gray-200 pt-5">
               <h3 class="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Settings2 class="w-4 h-4" />
-                Configuracoes
+                Configurações
               </h3>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -66,6 +66,36 @@ export class CampaignContactRepository extends BaseRepository<CampaignContactDoc
   async deleteByCampaign(campaignId: string) {
     return this.deleteMany({ campaignId } as Filter<CampaignContactDocument>)
   }
+
+  /**
+   * Busca campanhas recentes enviadas para um telefone (últimas 48h)
+   * Tenta múltiplas variantes do número (com/sem 9 para BR)
+   */
+  async findRecentByPhone(phone: string, hoursAgo: number = 48): Promise<CampaignContactDocument[]> {
+    const since = new Date(Date.now() - hoursAgo * 60 * 60 * 1000)
+    const cleaned = phone.replace(/\D/g, '')
+
+    // Gerar variantes do telefone para cobrir diferenças de formatação
+    const phoneVariants = [cleaned]
+
+    // BR: se tem 13 dígitos (55 + DDD + 9 + número), gera versão sem o 9
+    if (cleaned.startsWith('55') && cleaned.length === 13) {
+      phoneVariants.push(`55${cleaned.charAt(2)}${cleaned.substring(4)}`)
+    }
+    // BR: se tem 12 dígitos (55 + DDD + número sem 9), gera versão com o 9
+    if (cleaned.startsWith('55') && cleaned.length === 12) {
+      phoneVariants.push(`55${cleaned.charAt(2)}9${cleaned.substring(3)}`)
+    }
+
+    return this.find(
+      {
+        phone: { $in: phoneVariants },
+        status: { $in: ['sent', 'delivered', 'read'] },
+        sentAt: { $gte: since },
+      } as Filter<CampaignContactDocument>,
+      { sort: { sentAt: -1 }, limit: 3 } as any,
+    )
+  }
 }
 
 export default new CampaignContactRepository()

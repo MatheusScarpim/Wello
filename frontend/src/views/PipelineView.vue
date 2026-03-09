@@ -338,7 +338,7 @@ onUnmounted(() => {
           @click="isSelectionMode = !isSelectionMode; if (!isSelectionMode) clearSelection()"
           class="btn-ghost text-sm"
           :class="{ 'bg-primary-50 text-primary-700': isSelectionMode }"
-          title="Modo de selecao"
+          title="Modo de seleção"
         >
           <CheckSquare class="w-4 h-4" />
         </button>
@@ -445,7 +445,7 @@ onUnmounted(() => {
       </div>
       <h3 class="font-semibold text-gray-900 mb-1">Nenhuma etapa configurada</h3>
       <p class="text-sm text-gray-500 mb-4">
-        Configure as etapas do quadro para comecar a organizar suas conversas.
+        Configure as etapas do quadro para começar a organizar suas conversas.
       </p>
       <button @click="showStageModal = true" class="btn-primary">
         <Settings class="w-4 h-4" />
@@ -454,18 +454,18 @@ onUnmounted(() => {
     </div>
 
     <!-- Kanban Board -->
-    <div v-else class="overflow-x-auto pb-4">
-      <div class="flex gap-4" style="min-width: max-content;">
+    <div v-else class="overflow-x-auto pb-4 -mx-2 px-2">
+      <div class="flex gap-5" style="min-width: max-content;">
         <div
           v-for="column in filteredColumns"
           :key="column.stage._id"
-          class="w-80 flex-shrink-0 rounded-xl transition-all duration-200"
+          class="w-[320px] flex-shrink-0 rounded-2xl transition-all duration-200 border"
           :class="[
             dragOverStageId === column.stage._id
-              ? 'ring-2 ring-primary-400 bg-primary-50'
+              ? 'ring-2 ring-primary-400 bg-primary-50/80 border-primary-200 scale-[1.01]'
               : column.stage._id === '__no_stage__'
-                ? 'bg-gray-100/50'
-                : 'bg-gray-50'
+                ? 'bg-gray-50/80 border-dashed border-gray-200'
+                : 'bg-gray-50/60 border-gray-100'
           ]"
           @dragover.prevent
           @dragenter="onDragEnter(column.stage._id)"
@@ -473,33 +473,33 @@ onUnmounted(() => {
           @drop="onDrop($event, column.stage._id)"
         >
           <!-- Column Header -->
-          <div
-            class="p-4 rounded-t-xl"
-            :class="column.stage._id === '__no_stage__' ? 'border-t-4 border-dashed' : 'border-t-4'"
-            :style="{ borderTopColor: column.stage.color }"
-          >
+          <div class="p-4 pb-3">
             <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <h3 class="font-semibold text-gray-900 truncate">
+              <div class="flex items-center gap-2.5">
+                <div
+                  class="w-3 h-3 rounded-full flex-shrink-0 shadow-sm"
+                  :style="{ backgroundColor: column.stage.color }"
+                />
+                <h3 class="font-semibold text-gray-800 truncate text-sm">
                   {{ column.stage.name }}
                 </h3>
-                <span
-                  class="text-xs px-2 py-0.5 rounded-full font-medium"
-                  :style="{
-                    backgroundColor: column.stage.color + '20',
-                    color: column.stage.color
-                  }"
-                >
-                  {{ column.total }}
-                </span>
               </div>
+              <span
+                class="text-xs px-2.5 py-1 rounded-lg font-bold tabular-nums"
+                :style="{
+                  backgroundColor: column.stage.color + '18',
+                  color: column.stage.color
+                }"
+              >
+                {{ column.total }}
+              </span>
             </div>
           </div>
 
           <!-- Column Body -->
           <div
-            class="p-3 space-y-3 overflow-y-auto"
-            style="max-height: calc(100vh - 16rem); min-height: 200px;"
+            class="px-3 pb-3 space-y-2.5 overflow-y-auto scrollbar-thin"
+            style="max-height: calc(100vh - 16rem); min-height: 120px;"
           >
             <div
               v-for="conversation in column.conversations"
@@ -522,12 +522,15 @@ onUnmounted(() => {
             <!-- Empty Column State -->
             <div
               v-if="column.conversations.length === 0"
-              class="flex flex-col items-center justify-center py-8 text-center"
+              class="flex flex-col items-center justify-center py-10 text-center"
             >
-              <p class="text-sm text-gray-400">
-                {{ column.stage._id === '__no_stage__' ? 'Todas as conversas estao em etapas' : 'Nenhuma conversa nesta etapa' }}
+              <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                <KanbanSquare class="w-5 h-5 text-gray-300" />
+              </div>
+              <p class="text-xs text-gray-400 font-medium">
+                {{ column.stage._id === '__no_stage__' ? 'Todas as conversas estão em etapas' : 'Nenhuma conversa nesta etapa' }}
               </p>
-              <p class="text-xs text-gray-300 mt-1">Arraste conversas para ca</p>
+              <p class="text-[11px] text-gray-300 mt-1">Arraste conversas para cá</p>
             </div>
           </div>
         </div>

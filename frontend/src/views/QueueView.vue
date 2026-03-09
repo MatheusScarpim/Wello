@@ -110,7 +110,7 @@ async function fetchFinalizations() {
       selectedFinalizationIds.value = []
     }
   } catch {
-    toast.error('Erro ao carregar finalizacoes')
+    toast.error('Erro ao carregar finalizações')
   }
 }
 

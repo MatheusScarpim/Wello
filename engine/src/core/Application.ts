@@ -12,6 +12,7 @@ import { azureStorageService } from '@/services/AzureStorageService'
 
 import BotFactory from './bot/BotFactory'
 import { MessageContext } from './bot/interfaces/IBotStage'
+import { AiAgentBot } from './ai-agent/AiAgentBot'
 import DatabaseManager from './database/DatabaseManager'
 import MessagingService from './messaging/MessagingService'
 import InstagramPrivateManager from './providers/InstagramPrivateManager'
@@ -41,6 +42,10 @@ export class Application {
   private messageService!: MessageService
   private botEnabledCache: { value: boolean; lastFetch: number } = {
     value: true,
+    lastFetch: 0,
+  }
+  private aiAgentEnabledCache: { value: boolean; lastFetch: number } = {
+    value: false,
     lastFetch: 0,
   }
 
@@ -152,6 +157,10 @@ export class Application {
    */
   private async registerBots(): Promise<void> {
     console.log('🤖 Registrando bots...')
+
+    // Registra AI Agent Bot
+    BotFactory.registerBot('ai-agent', AiAgentBot as any)
+
     const { DynamicBotLoader } = await import('./bot/DynamicBotLoader')
     await DynamicBotLoader.loadAllPublished()
     const count = BotFactory.getRegisteredBots().length
@@ -454,6 +463,19 @@ export class Application {
         hasMedia: Boolean(message.mediaUrl),
       })
 
+      // Transcrever áudio automaticamente (antes de salvar, assim a transcrição fica no banco)
+      if (
+        (message.type === 'audio' || message.type === 'ptt') &&
+        !message.message &&
+        (message.mediaUrl || message.mediaStorage)
+      ) {
+        const transcription = await this.transcribeAudioMessage(message)
+        if (transcription) {
+          message.message = `🎤 ${transcription}`
+          console.log(`🎤 Áudio transcrito: "${transcription.substring(0, 80)}..."`)
+        }
+      }
+
       // Verifica se é resposta de confirmação de agendamento (antes de qualquer processamento)
       const messageText = (message.message || '').trim()
       const confirmReply = await appointmentReminderService.handleConfirmationReply(
@@ -540,6 +562,14 @@ export class Application {
           return
         }
 
+        // Se a conversa está na fila de espera (transferida para humano), o bot não responde
+        if (conversation.status === 'waiting') {
+          console.log(
+            `🚫 Bot ignorado — conversa na fila de atendimento humano: ${message.identifier}`,
+          )
+          return
+        }
+
         // Verifica se a mensagem é um comando para atendimento humano
         if (messageText.toLowerCase() === '#human') {
           console.log(
@@ -603,15 +633,25 @@ export class Application {
         }
 
         // Define qual bot usar
-        let botId =
-          session?.botId || instanceBotConfig?.botId || this.getDefaultBotId()
+        // Se AI Agent está habilitado e não tem bot específico, usa ai-agent
+        const aiAgentEnabled = await this.isAiAgentEnabled()
+        let botId = session?.botId || instanceBotConfig?.botId || null
 
-        // Se o bot não estiver registrado, usa o bot 'chat'
+        if (!botId) {
+          botId = aiAgentEnabled ? 'ai-agent' : this.getDefaultBotId()
+        }
+
+        // Se o bot não estiver registrado, tenta ai-agent ou fallback
         if (!BotFactory.isBotRegistered(botId)) {
-          console.warn(
-            `⚠️ Bot ${botId} não registrado. Usando bot 'chat' como fallback.`,
-          )
-          botId = 'chat'
+          if (aiAgentEnabled && botId !== 'ai-agent') {
+            console.log(`🤖 Bot ${botId} não registrado. Usando AI Agent.`)
+            botId = 'ai-agent'
+          } else {
+            console.warn(
+              `⚠️ Bot ${botId} não registrado. Usando bot 'chat' como fallback.`,
+            )
+            botId = 'chat'
+          }
         }
 
         // Cria contexto da mensagem
@@ -628,7 +668,10 @@ export class Application {
           photo: message.photo,
           mediaUrl: message.mediaUrl,
           mediaStorage: message.mediaStorage,
-          sessionData: session?.sessionData,
+          sessionData: {
+            ...session?.sessionData,
+            _mongoConversationId: conversation._id.toString(),
+          },
         }
 
         // Processa com o bot
@@ -666,6 +709,24 @@ export class Application {
           response.list ||
           response.media
         if (hasContent) {
+          // Simular digitação para parecer humano (só para ai-agent)
+          if (botId === 'ai-agent') {
+            await this.simulateTyping(message, response)
+          }
+
+          // Re-verificar se operador assumiu durante o processamento do bot
+          const freshConversation = await this.conversationService.getConversationOpen(
+            message.identifier,
+            message.provider,
+            message._sessionName,
+          )
+          if (freshConversation?.operatorId || freshConversation?.status === 'waiting') {
+            console.log(
+              `🚫 Bot resposta descartada — operador assumiu ou conversa na fila durante processamento: ${message.identifier}`,
+            )
+            return
+          }
+
           await this.sendResponse(
             message.identifier,
             message.provider,
@@ -958,11 +1019,12 @@ export class Application {
 
       const conversationId = conversation._id.toString()
 
-      // Marca sessão de bot como transferida (para cooldown)
+      // Marca sessão de bot como transferida (para cooldown) e desativa
       await this.botSessionRepository.setTransferredAt(message.identifier)
+      await this.botSessionRepository.endSession(message.identifier)
 
-      // Remove operador e coloca na fila
-      await this.conversationService.removeOperator(conversationId)
+      // Remove operador e coloca na fila de espera
+      await this.conversationService.removeOperator(conversationId, 'waiting')
 
       // Se tem departamento, atribui
       if (departmentId) {
@@ -987,6 +1049,92 @@ export class Application {
       )
     } catch (error) {
       console.error('❌ Erro ao transferir para atendente:', error)
+    }
+  }
+
+  /**
+   * Transcreve mensagem de áudio usando OpenAI Whisper.
+   * Chamado antes de salvar a mensagem no banco, assim a transcrição
+   * fica disponível para todo o sistema (sugestões, histórico, pipeline).
+   */
+  private async transcribeAudioMessage(message: IncomingMessage): Promise<string | null> {
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) return null
+
+    try {
+      let audioBuffer: Buffer | null = null
+      let filename = 'audio.ogg'
+
+      // Tentar baixar do Azure Storage
+      if (message.mediaStorage?.provider === 'azure_blob' && message.mediaStorage.blobName) {
+        try {
+          const url = azureStorageService.getBlobUrl(message.mediaStorage.blobName)
+          const response = await fetch(url)
+          if (response.ok) {
+            audioBuffer = Buffer.from(await response.arrayBuffer())
+            filename = message.mediaStorage.blobName.split('/').pop() || filename
+          }
+        } catch {}
+      }
+
+      // Fallback: baixar da mediaUrl
+      if (!audioBuffer && message.mediaUrl) {
+        try {
+          const response = await fetch(message.mediaUrl)
+          if (response.ok) {
+            audioBuffer = Buffer.from(await response.arrayBuffer())
+          }
+        } catch {}
+      }
+
+      if (!audioBuffer || audioBuffer.length === 0) return null
+
+      const formData = new FormData()
+      formData.append('file', new Blob([audioBuffer]), filename)
+      formData.append('model', 'whisper-1')
+      formData.append('language', 'pt')
+
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: formData,
+        signal: AbortSignal.timeout(30000),
+      })
+
+      if (!response.ok) return null
+
+      const result = (await response.json()) as { text: string }
+      return result.text?.trim() || null
+    } catch (error: any) {
+      console.warn('⚠️ Erro ao transcrever áudio:', error.message)
+      return null
+    }
+  }
+
+  /**
+   * Simula indicador de digitação e delay humanizado antes de enviar resposta
+   */
+  private async simulateTyping(message: any, response: any): Promise<void> {
+    try {
+      // Calcular delay baseado no tamanho da resposta (simular leitura + digitação)
+      const responseText = response.message || response.buttons?.title || ''
+      const charCount = responseText.length
+      // ~30-50ms por caractere (velocidade de digitação humana), min 1.5s, max 6s
+      const typingDelay = Math.min(Math.max(charCount * 40, 1500), 6000)
+
+      // Enviar indicador de "digitando..." via WPP
+      if (message._sessionName && message.provider === 'whatsapp') {
+        const client = WhatsAppMultiManager.getClient(message._sessionName)
+        if (client) {
+          const chatId = `${message.identifier}@c.us`
+          await client.startTyping(chatId).catch(() => {})
+        }
+      }
+
+      // Delay humanizado
+      await new Promise((resolve) => setTimeout(resolve, typingDelay))
+    } catch {
+      // Não bloqueia envio se typing falhar
     }
   }
 
@@ -1058,6 +1206,27 @@ export class Application {
       return enabled
     } catch (error) {
       return envValue
+    }
+  }
+
+  /**
+   * Verifica se o AI Agent está habilitado
+   */
+  private async isAiAgentEnabled(): Promise<boolean> {
+    const now = Date.now()
+    if (now - this.aiAgentEnabledCache.lastFetch < 10000) {
+      return this.aiAgentEnabledCache.value
+    }
+
+    try {
+      const { IaRepository } = await import('@/api/repositories/IaRepository')
+      const iaRepo = new IaRepository()
+      const config = await iaRepo.getConfig()
+      const enabled = config?.agentEnabled === true
+      this.aiAgentEnabledCache = { value: enabled, lastFetch: now }
+      return enabled
+    } catch {
+      return this.aiAgentEnabledCache.value
     }
   }
 
