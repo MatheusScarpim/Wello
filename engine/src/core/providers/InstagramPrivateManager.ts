@@ -64,14 +64,19 @@ class InstagramPrivateManager extends EventEmitter {
   }
 
   /**
-   * Cria um IgApiClient já com os mixins de realtime/exportState aplicados
+   * Cria um IgApiClient base (sem realtime)
    */
-  private createIgClient(username: string): any {
+  private createBaseClient(username: string): IgApiClient {
     const ig = new IgApiClient()
     ig.state.generateDevice(username)
-    // Aplica mixins de realtime + importState/exportState
-    withFbnsAndRealtime(ig)
     return ig
+  }
+
+  /**
+   * Aplica o mixin de realtime/exportState após o login
+   */
+  private applyRealtimeMixin(ig: IgApiClient): any {
+    return withFbnsAndRealtime(ig)
   }
 
   /**
@@ -102,10 +107,14 @@ class InstagramPrivateManager extends EventEmitter {
 
     console.log(`📸 [${config.name}] Restaurando sessão Instagram...`)
 
-    const ig = this.createIgClient(config.username)
+    const baseIg = this.createBaseClient(config.username)
 
     try {
-      await ig.importState(JSON.parse(config.sessionData))
+      // Restaura cookies/state manualmente antes de aplicar o mixin
+      await baseIg.state.deserialize(JSON.parse(config.sessionData))
+
+      // Aplica o mixin depois de restaurar o state
+      const ig = this.applyRealtimeMixin(baseIg)
 
       const instanceData: InstanceData = {
         ig,
@@ -142,10 +151,11 @@ class InstagramPrivateManager extends EventEmitter {
 
     await instagramPrivateInstanceRepository.updateStatus(sessionName, 'connecting')
 
-    const ig = this.createIgClient(config.username)
+    // Usa cliente base para login (sem mixin de realtime)
+    const baseIg = this.createBaseClient(config.username)
 
     const instanceData: InstanceData = {
-      ig,
+      ig: baseIg,
       status: 'connecting',
       config,
       seenItemIds: new Set(),
@@ -153,10 +163,17 @@ class InstagramPrivateManager extends EventEmitter {
     this.instances.set(sessionName, instanceData)
 
     try {
-      await ig.simulate.preLoginFlow()
-      const loggedUser = await ig.account.login(config.username, config.password)
-      await ig.simulate.postLoginFlow()
+      // preLoginFlow é opcional — simula o app real, mas pode falhar com checkpoint
+      try { await baseIg.simulate.preLoginFlow() } catch (_) {}
 
+      const loggedUser = await baseIg.account.login(config.username, config.password)
+
+      // postLoginFlow também é opcional
+      try { await baseIg.simulate.postLoginFlow() } catch (_) {}
+
+      // Após login bem-sucedido, aplica mixin de realtime
+      const ig = this.applyRealtimeMixin(baseIg)
+      instanceData.ig = ig
       instanceData.config = { ...config, igUserId: String(loggedUser.pk) }
 
       await this.persistSession(sessionName, ig, {
@@ -174,6 +191,12 @@ class InstagramPrivateManager extends EventEmitter {
       }
 
       if (err instanceof IgCheckpointError) {
+        return await this.handleCheckpointRequired(sessionName, instanceData)
+      }
+
+      // Checkpoint pode vir como erro genérico com 'checkpoint_required' no body
+      if (err?.message?.includes('checkpoint_required') || err?.response?.body?.checkpoint_url) {
+        baseIg.state.checkpoint = err?.response?.body
         return await this.handleCheckpointRequired(sessionName, instanceData)
       }
 
@@ -250,10 +273,13 @@ class InstagramPrivateManager extends EventEmitter {
           trustThisDevice: '1',
         })
 
+        // Aplica mixin de realtime após 2FA bem-sucedido
+        const ig = this.applyRealtimeMixin(data.ig)
+        data.ig = ig
         data.pendingTwoFactor = undefined
         data.config = { ...data.config, igUserId: String(loggedUser.pk) }
 
-        await this.persistSession(sessionName, data.ig, {
+        await this.persistSession(sessionName, ig, {
           igUserId: String(loggedUser.pk),
           profilePic: loggedUser.profile_pic_url,
           fullName: loggedUser.full_name,
@@ -261,7 +287,10 @@ class InstagramPrivateManager extends EventEmitter {
       } else if (data.pendingCheckpoint) {
         await data.ig.challenge.sendSecurityCode(code.trim())
         data.pendingCheckpoint = false
-        await this.persistSession(sessionName, data.ig)
+        // Aplica mixin de realtime após checkpoint bem-sucedido
+        const ig = this.applyRealtimeMixin(data.ig)
+        data.ig = ig
+        await this.persistSession(sessionName, ig)
       } else {
         throw new Error('Nenhum challenge pendente para esta sessão')
       }
@@ -277,6 +306,17 @@ class InstagramPrivateManager extends EventEmitter {
   }
 
   /**
+   * Obtém o userId da sessão (do cookie ou do config salvo)
+   */
+  private getUserId(data: InstanceData): string {
+    try {
+      return data.ig.state.cookieUserId
+    } catch (_) {
+      return data.config.igUserId || ''
+    }
+  }
+
+  /**
    * Inicia a conexão MQTT real-time para receber DMs
    */
   private async startRealtime(sessionName: string): Promise<void> {
@@ -285,12 +325,28 @@ class InstagramPrivateManager extends EventEmitter {
 
     const { config, ig } = data
 
+    // Marca como conectado ANTES de tentar MQTT — o login já deu certo
+    data.status = 'connected'
+    this.instances.set(sessionName, data)
+    await instagramPrivateInstanceRepository.updateStatus(sessionName, 'connected')
+    this.emit('connected', { sessionName })
+
+    const userId = this.getUserId(data)
+    if (!userId) {
+      console.warn(`⚠️ [${config.name}] userId não encontrado — MQTT não será iniciado`)
+      return
+    }
+
     try {
+      // Verifica se o mixin de realtime está disponível
+      if (!ig.realtime) {
+        console.warn(`⚠️ [${config.name}] Realtime não disponível — apenas envio de mensagens`)
+        return
+      }
+
       // Para realtime anterior se houver
       if (ig.realtime?.mqtt?.connected) {
-        try {
-          await ig.realtime.disconnect()
-        } catch (_) {}
+        try { await ig.realtime.disconnect() } catch (_) {}
       }
 
       ig.realtime.on('receive', async (topic: any, messages: any) => {
@@ -316,31 +372,32 @@ class InstagramPrivateManager extends EventEmitter {
         console.log(`📨 [${config.name}] FBNS push:`, notification?.collapseKey)
       })
 
+      // irisData é opcional — se a inbox retornar 400, conecta sem ela
+      let irisData: any = undefined
+      try {
+        irisData = await ig.feed.directInbox().request()
+      } catch (inboxErr: any) {
+        console.warn(`⚠️ [${config.name}] Inbox falhou (${inboxErr.message}) — conectando MQTT sem irisData`)
+      }
+
       await ig.realtime.connect({
         graphQlSubs: [
           GraphQLSubscriptions.getAppPresenceSubscription(),
           GraphQLSubscriptions.getDirectStatusSubscription(),
-          GraphQLSubscriptions.getDirectTypingSubscription(ig.state.cookieUserId),
+          GraphQLSubscriptions.getDirectTypingSubscription(userId),
         ],
         skywalkerSubs: [
-          SkywalkerSubscriptions.directSub(ig.state.cookieUserId),
-          SkywalkerSubscriptions.liveSub(ig.state.cookieUserId),
+          SkywalkerSubscriptions.directSub(userId),
+          SkywalkerSubscriptions.liveSub(userId),
         ],
-        irisData: await ig.feed.directInbox().request(),
+        ...(irisData ? { irisData } : {}),
         connectOverrides: {},
       })
 
-      data.status = 'connected'
-      this.instances.set(sessionName, data)
-
-      await instagramPrivateInstanceRepository.updateStatus(sessionName, 'connected')
-      this.emit('connected', { sessionName })
-
       console.log(`✅ [${config.name}] MQTT conectado — aguardando DMs`)
     } catch (err: any) {
-      console.error(`❌ [${config.name}] Falha ao iniciar MQTT:`, err.message)
-      data.status = 'error'
-      await instagramPrivateInstanceRepository.updateStatus(sessionName, 'error')
+      // MQTT falhou mas a conta continua conectada (envio funciona, recebimento não)
+      console.warn(`⚠️ [${config.name}] MQTT falhou (${err.message}) — envio funciona, recebimento de DMs indisponível`)
     }
   }
 
@@ -556,7 +613,11 @@ class InstagramPrivateManager extends EventEmitter {
     extra?: Partial<IInstagramPrivateInstance>,
   ): Promise<void> {
     try {
-      const sessionData = JSON.stringify(await ig.exportState())
+      // exportState vem do mixin withFbnsAndRealtime; fallback para state.serialize
+      const state = typeof ig.exportState === 'function'
+        ? await ig.exportState()
+        : await ig.state.serialize()
+      const sessionData = JSON.stringify(state)
       await instagramPrivateInstanceRepository.updateSessionData(sessionName, sessionData)
       if (extra) {
         await instagramPrivateInstanceRepository.updateStatus(sessionName, 'connected', extra)

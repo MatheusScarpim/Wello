@@ -840,6 +840,37 @@ export interface WhatsAppInstancesStatus {
 }
 
 // ============================================
+// INSTAGRAM PRIVATE INSTANCE TYPES
+// ============================================
+
+export type IgPrivateStatus = 'disconnected' | 'connecting' | 'challenge' | 'connected' | 'error'
+
+export interface InstagramPrivateInstance {
+  id: string
+  name: string
+  sessionName: string
+  username: string
+  status: IgPrivateStatus
+  challengeType?: 'totp' | 'sms'
+  profilePic?: string
+  fullName?: string
+  igUserId?: string
+  botEnabled: boolean
+  botId?: string | null
+  departmentIds: string[]
+}
+
+export interface InstagramPrivatePayload {
+  name: string
+  username: string
+  password: string
+  botEnabled?: boolean
+  botId?: string | null
+  departmentIds?: string[]
+  autoConnect?: boolean
+}
+
+// ============================================
 // FINALIZATION METRICS TYPES
 // ============================================
 

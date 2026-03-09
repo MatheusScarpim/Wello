@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { botsApi, whatsappInstancesApi, departmentsApi } from '@/api'
+import { botsApi, whatsappInstancesApi, instagramPrivateApi, departmentsApi } from '@/api'
 import { useToast } from 'vue-toastification'
 import type {
   WhatsAppInstance,
   WhatsAppInstancePayload,
+  InstagramPrivateInstance,
+  InstagramPrivatePayload,
   BotListResponse,
   AutomaticMessages,
   Department,
@@ -27,10 +29,17 @@ import {
   X,
   MessageSquare,
   Save,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Instagram,
+  Camera,
+  ShieldCheck,
+  LogIn,
 } from 'lucide-vue-next'
 
 const toast = useToast()
+
+// Active tab
+const activeTab = ref<'whatsapp' | 'instagram'>('whatsapp')
 
 const instances = ref<WhatsAppInstance[]>([])
 const registeredBots = ref<string[]>([])
@@ -617,10 +626,151 @@ async function saveInstanceMetaConfig(instance: WhatsAppInstance) {
   }
 }
 
+// ============================================
+// INSTAGRAM PRIVATE
+// ============================================
+const igInstances = ref<InstagramPrivateInstance[]>([])
+const isLoadingIg = ref(false)
+const showCreateIgModal = ref(false)
+const showChallengeModal = ref(false)
+const challengeInstanceId = ref('')
+const challengeCode = ref('')
+const challengeType = ref<'totp' | 'sms'>('totp')
+const isSubmittingChallenge = ref(false)
+const connectingIgIds = ref<Set<string>>(new Set())
+const disconnectingIgIds = ref<Set<string>>(new Set())
+
+const newIgForm = ref<InstagramPrivatePayload>({
+  name: '',
+  username: '',
+  password: '',
+})
+const isCreatingIg = ref(false)
+
+const igStats = computed(() => {
+  const total = igInstances.value.length
+  const connected = igInstances.value.filter(i => i.status === 'connected').length
+  const disconnected = total - connected
+  return { total, connected, disconnected }
+})
+
+function getIgStatusText(status: string) {
+  switch (status) {
+    case 'connected': return 'Conectado'
+    case 'connecting': return 'Conectando...'
+    case 'challenge': return 'Aguardando 2FA'
+    case 'error': return 'Erro'
+    default: return 'Desconectado'
+  }
+}
+
+async function fetchIgInstances() {
+  try {
+    isLoadingIg.value = true
+    const response = await instagramPrivateApi.list()
+    if (response.data) {
+      igInstances.value = response.data as InstagramPrivateInstance[]
+    }
+  } catch (err: any) {
+    toast.error(err.message || 'Erro ao buscar contas Instagram')
+  } finally {
+    isLoadingIg.value = false
+  }
+}
+
+async function createIgInstance() {
+  if (!newIgForm.value.name || !newIgForm.value.username || !newIgForm.value.password) {
+    toast.error('Preencha nome, usuario e senha')
+    return
+  }
+  isCreatingIg.value = true
+  try {
+    await instagramPrivateApi.create(newIgForm.value)
+    toast.success('Conta Instagram criada!')
+    showCreateIgModal.value = false
+    newIgForm.value = { name: '', username: '', password: '' }
+    await fetchIgInstances()
+  } catch (err: any) {
+    toast.error(err.message || 'Erro ao criar conta')
+  } finally {
+    isCreatingIg.value = false
+  }
+}
+
+async function connectIgInstance(id: string) {
+  connectingIgIds.value.add(id)
+  try {
+    const response = await instagramPrivateApi.connect(id)
+    const result = response.data as any
+
+    if (result?.data?.status === 'challenge') {
+      challengeInstanceId.value = id
+      challengeType.value = result.data.challengeType || 'totp'
+      challengeCode.value = ''
+      showChallengeModal.value = true
+      toast.info('Verificacao em 2 etapas necessaria')
+    } else if (result?.data?.status === 'connected') {
+      toast.success('Instagram conectado!')
+    } else if (result?.data?.status === 'error') {
+      toast.error(result?.data?.error || 'Erro ao conectar')
+    }
+
+    await fetchIgInstances()
+  } catch (err: any) {
+    toast.error(err.message || 'Erro ao conectar')
+  } finally {
+    connectingIgIds.value.delete(id)
+  }
+}
+
+async function submitChallenge() {
+  if (!challengeCode.value.trim()) {
+    toast.error('Digite o codigo')
+    return
+  }
+  isSubmittingChallenge.value = true
+  try {
+    await instagramPrivateApi.challenge(challengeInstanceId.value, challengeCode.value.trim())
+    toast.success('Instagram conectado!')
+    showChallengeModal.value = false
+    challengeCode.value = ''
+    await fetchIgInstances()
+  } catch (err: any) {
+    toast.error(err.message || 'Codigo invalido')
+  } finally {
+    isSubmittingChallenge.value = false
+  }
+}
+
+async function disconnectIgInstance(id: string) {
+  disconnectingIgIds.value.add(id)
+  try {
+    await instagramPrivateApi.disconnect(id)
+    toast.success('Instagram desconectado')
+    await fetchIgInstances()
+  } catch (err: any) {
+    toast.error(err.message || 'Erro ao desconectar')
+  } finally {
+    disconnectingIgIds.value.delete(id)
+  }
+}
+
+async function deleteIgInstance(id: string) {
+  if (!confirm('Tem certeza que deseja remover esta conta Instagram?')) return
+  try {
+    await instagramPrivateApi.delete(id)
+    toast.success('Conta removida')
+    await fetchIgInstances()
+  } catch (err: any) {
+    toast.error(err.message || 'Erro ao remover')
+  }
+}
+
 onMounted(async () => {
   await fetchInstances()
   await fetchBots()
   await fetchDepartments()
+  await fetchIgInstances()
 
   window.addEventListener('ws:whatsapp-instances', handleWhatsAppInstancesUpdate)
 })
@@ -638,11 +788,44 @@ onUnmounted(() => {
         <h1 class="text-2xl font-bold text-gray-900">Instancias</h1>
         <p class="text-gray-500 mt-1">Gerencie suas instancias de canais</p>
       </div>
-      <button @click="showCreateModal = true" class="btn-primary">
+      <button v-if="activeTab === 'whatsapp'" @click="showCreateModal = true" class="btn-primary">
         <Plus class="w-4 h-4" />
         Nova Instancia
       </button>
+      <button v-else @click="showCreateIgModal = true" class="btn-primary">
+        <Plus class="w-4 h-4" />
+        Nova Conta Instagram
+      </button>
     </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
+      <button
+        @click="activeTab = 'whatsapp'"
+        class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-colors"
+        :class="activeTab === 'whatsapp' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+      >
+        <Smartphone class="w-4 h-4" />
+        WhatsApp
+        <span class="px-1.5 py-0.5 text-xs rounded-full" :class="activeTab === 'whatsapp' ? 'bg-primary-100 text-primary-700' : 'bg-gray-200 text-gray-600'">
+          {{ stats.total }}
+        </span>
+      </button>
+      <button
+        @click="activeTab = 'instagram'"
+        class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-colors"
+        :class="activeTab === 'instagram' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+      >
+        <Camera class="w-4 h-4" />
+        Instagram
+        <span class="px-1.5 py-0.5 text-xs rounded-full" :class="activeTab === 'instagram' ? 'bg-pink-100 text-pink-700' : 'bg-gray-200 text-gray-600'">
+          {{ igStats.total }}
+        </span>
+      </button>
+    </div>
+
+    <!-- ============ WHATSAPP TAB ============ -->
+    <template v-if="activeTab === 'whatsapp'">
 
     <!-- Stats -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1033,6 +1216,195 @@ onUnmounted(() => {
         </li>
       </ul>
     </div>
+
+    </template>
+    <!-- ============ END WHATSAPP TAB ============ -->
+
+    <!-- ============ INSTAGRAM TAB ============ -->
+    <template v-if="activeTab === 'instagram'">
+
+    <!-- Instagram Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="card p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-pink-100 flex items-center justify-center">
+            <Camera class="w-5 h-5 text-pink-600" />
+          </div>
+          <div>
+            <p class="text-sm text-gray-500">Total</p>
+            <p class="text-xl font-semibold">{{ igStats.total }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="card p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+            <Wifi class="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <p class="text-sm text-gray-500">Conectados</p>
+            <p class="text-xl font-semibold text-green-600">{{ igStats.connected }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="card p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+            <WifiOff class="w-5 h-5 text-gray-600" />
+          </div>
+          <div>
+            <p class="text-sm text-gray-500">Desconectados</p>
+            <p class="text-xl font-semibold text-gray-600">{{ igStats.disconnected }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="isLoadingIg" class="card p-12 text-center">
+      <Loader2 class="w-12 h-12 animate-spin text-pink-600 mx-auto" />
+      <p class="mt-4 text-gray-500">Carregando contas Instagram...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div v-else-if="igInstances.length === 0" class="card p-12 text-center">
+      <div class="w-20 h-20 mx-auto rounded-full bg-pink-50 flex items-center justify-center">
+        <Camera class="w-10 h-10 text-pink-400" />
+      </div>
+      <h3 class="mt-4 text-lg font-medium text-gray-900">Nenhuma conta Instagram</h3>
+      <p class="mt-2 text-gray-500">Conecte sua primeira conta Instagram para comecar</p>
+      <button @click="showCreateIgModal = true" class="btn-primary mt-4">
+        <Plus class="w-4 h-4" />
+        Adicionar Conta
+      </button>
+    </div>
+
+    <!-- Instagram Instances List -->
+    <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div
+        v-for="ig in igInstances"
+        :key="ig.id"
+        class="card overflow-hidden"
+      >
+        <div class="p-5">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div
+                class="w-12 h-12 rounded-full flex items-center justify-center"
+                :class="{
+                  'bg-green-100': ig.status === 'connected',
+                  'bg-yellow-100': ig.status === 'challenge',
+                  'bg-blue-100': ig.status === 'connecting',
+                  'bg-red-100': ig.status === 'error',
+                  'bg-gray-100': ig.status === 'disconnected'
+                }"
+              >
+                <Camera
+                  class="w-6 h-6"
+                  :class="{
+                    'text-green-600': ig.status === 'connected',
+                    'text-yellow-600': ig.status === 'challenge',
+                    'text-blue-600': ig.status === 'connecting',
+                    'text-red-600': ig.status === 'error',
+                    'text-gray-600': ig.status === 'disconnected'
+                  }"
+                />
+              </div>
+              <div>
+                <h3 class="font-semibold text-gray-900">{{ ig.name }}</h3>
+                <p class="text-sm text-gray-500">@{{ ig.username }}</p>
+                <p v-if="ig.fullName" class="text-xs text-gray-400 mt-0.5">{{ ig.fullName }}</p>
+              </div>
+            </div>
+
+            <span
+              class="px-2.5 py-1 rounded-full text-xs font-medium"
+              :class="{
+                'bg-green-100 text-green-800': ig.status === 'connected',
+                'bg-yellow-100 text-yellow-800': ig.status === 'challenge',
+                'bg-blue-100 text-blue-800': ig.status === 'connecting',
+                'bg-red-100 text-red-800': ig.status === 'error',
+                'bg-gray-100 text-gray-800': ig.status === 'disconnected'
+              }"
+            >
+              {{ getIgStatusText(ig.status) }}
+            </span>
+          </div>
+
+          <!-- Connected Info -->
+          <div v-if="ig.status === 'connected' && ig.igUserId" class="mt-4 p-3 bg-gray-50 rounded-lg">
+            <div class="flex items-center gap-2 text-sm">
+              <CheckCircle2 class="w-4 h-4 text-green-500" />
+              <span class="text-gray-600">ID: {{ ig.igUserId }}</span>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="mt-4 flex items-center gap-2">
+            <!-- Connect -->
+            <button
+              v-if="ig.status === 'disconnected' || ig.status === 'error'"
+              @click="connectIgInstance(ig.id)"
+              :disabled="connectingIgIds.has(ig.id)"
+              class="btn-sm bg-green-50 text-green-700 hover:bg-green-100"
+            >
+              <Loader2 v-if="connectingIgIds.has(ig.id)" class="w-3.5 h-3.5 animate-spin" />
+              <LogIn v-else class="w-3.5 h-3.5" />
+              {{ connectingIgIds.has(ig.id) ? 'Conectando...' : 'Conectar' }}
+            </button>
+
+            <!-- Challenge (2FA pending) -->
+            <button
+              v-if="ig.status === 'challenge'"
+              @click="challengeInstanceId = ig.id; challengeType = ig.challengeType || 'totp'; challengeCode = ''; showChallengeModal = true"
+              class="btn-sm bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+            >
+              <ShieldCheck class="w-3.5 h-3.5" />
+              Digitar Codigo 2FA
+            </button>
+
+            <!-- Disconnect -->
+            <button
+              v-if="ig.status === 'connected'"
+              @click="disconnectIgInstance(ig.id)"
+              :disabled="disconnectingIgIds.has(ig.id)"
+              class="btn-sm bg-red-50 text-red-700 hover:bg-red-100"
+            >
+              <Loader2 v-if="disconnectingIgIds.has(ig.id)" class="w-3.5 h-3.5 animate-spin" />
+              <Power v-else class="w-3.5 h-3.5" />
+              Desconectar
+            </button>
+
+            <div class="flex-1" />
+
+            <!-- Delete -->
+            <button
+              @click="deleteIgInstance(ig.id)"
+              class="btn-sm text-red-600 hover:bg-red-50"
+              title="Remover conta"
+            >
+              <Trash2 class="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info -->
+    <div class="card p-4 bg-yellow-50 border-yellow-200">
+      <div class="flex items-start gap-3">
+        <AlertCircle class="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+        <div class="text-sm text-yellow-800">
+          <p class="font-medium">Instagram Privado (API nao-oficial)</p>
+          <p class="mt-1">Esta integracao usa a API privada do Instagram (similar ao WPPConnect para WhatsApp). Use contas dedicadas para atendimento — contas pessoais podem ser suspensas.</p>
+        </div>
+      </div>
+    </div>
+
+    </template>
+    <!-- ============ END INSTAGRAM TAB ============ -->
+
+    <!-- ============ MODALS (WhatsApp) ============ -->
 
     <!-- Create Modal -->
     <Teleport to="body">
@@ -1474,6 +1846,146 @@ onUnmounted(() => {
               <Loader2 v-if="isTransferring" class="w-4 h-4 animate-spin" />
               <ArrowRightLeft v-else class="w-4 h-4" />
               {{ isTransferring ? 'Transferindo...' : 'Transferir' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ============ INSTAGRAM MODALS ============ -->
+
+    <!-- Create Instagram Account Modal -->
+    <Teleport to="body">
+      <div
+        v-if="showCreateIgModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        @click.self="showCreateIgModal = false"
+      >
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full">
+          <div class="p-6 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xl font-semibold text-gray-900">Adicionar Conta Instagram</h2>
+              <button @click="showCreateIgModal = false" class="p-2 hover:bg-gray-100 rounded-lg">
+                <X class="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nome da conta *</label>
+              <input
+                v-model="newIgForm.name"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                placeholder="Ex: Suporte Instagram"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Usuario do Instagram *</label>
+              <div class="relative">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">@</span>
+                <input
+                  v-model="newIgForm.username"
+                  type="text"
+                  class="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                  placeholder="nome_da_conta"
+                />
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Senha *</label>
+              <input
+                v-model="newIgForm.password"
+                type="password"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                placeholder="Senha do Instagram"
+              />
+            </div>
+
+            <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div class="flex items-start gap-2">
+                <AlertCircle class="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <p class="text-xs text-yellow-800">
+                  As credenciais sao armazenadas de forma segura no servidor. Se a conta tiver 2FA ativo, voce precisara digitar o codigo na proxima etapa.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-6 border-t border-gray-200 flex justify-end gap-3">
+            <button @click="showCreateIgModal = false" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button
+              @click="createIgInstance"
+              :disabled="isCreatingIg"
+              class="px-4 py-2 text-sm font-medium text-white bg-pink-600 rounded-lg hover:bg-pink-700 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              <Loader2 v-if="isCreatingIg" class="w-4 h-4 animate-spin" />
+              <Plus v-else class="w-4 h-4" />
+              {{ isCreatingIg ? 'Criando...' : 'Criar Conta' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 2FA Challenge Modal -->
+    <Teleport to="body">
+      <div
+        v-if="showChallengeModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        @click.self="showChallengeModal = false"
+      >
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full">
+          <div class="p-6 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <ShieldCheck class="w-5 h-5 text-yellow-600" />
+                <h2 class="text-lg font-semibold text-gray-900">Verificacao em 2 Etapas</h2>
+              </div>
+              <button @click="showChallengeModal = false" class="p-2 hover:bg-gray-100 rounded-lg">
+                <X class="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <p class="text-sm text-gray-600">
+              <template v-if="challengeType === 'totp'">
+                Digite o codigo do seu app autenticador (Google Authenticator, Authy, etc).
+              </template>
+              <template v-else>
+                Digite o codigo enviado por SMS para o numero cadastrado.
+              </template>
+            </p>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Codigo</label>
+              <input
+                v-model="challengeCode"
+                type="text"
+                maxlength="8"
+                class="w-full px-3 py-3 border border-gray-300 rounded-lg text-center text-2xl tracking-[0.5em] font-mono focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                placeholder="000000"
+                @keyup.enter="submitChallenge"
+              />
+            </div>
+          </div>
+
+          <div class="p-6 border-t border-gray-200 flex justify-end gap-3">
+            <button @click="showChallengeModal = false" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button
+              @click="submitChallenge"
+              :disabled="isSubmittingChallenge || !challengeCode.trim()"
+              class="px-4 py-2 text-sm font-medium text-white bg-pink-600 rounded-lg hover:bg-pink-700 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              <Loader2 v-if="isSubmittingChallenge" class="w-4 h-4 animate-spin" />
+              <ShieldCheck v-else class="w-4 h-4" />
+              {{ isSubmittingChallenge ? 'Verificando...' : 'Verificar' }}
             </button>
           </div>
         </div>

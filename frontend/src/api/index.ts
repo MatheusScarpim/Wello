@@ -53,6 +53,9 @@ import type {
   WhatsAppInstance,
   WhatsAppInstancePayload,
   WhatsAppInstancesStatus,
+  // Instagram Private types
+  InstagramPrivateInstance,
+  InstagramPrivatePayload,
   // Finalization Metrics types
   FinalizationMetrics,
   FinalizationDetail,
@@ -156,6 +159,24 @@ export const whatsappInstancesApi = {
       '/api/whatsapp/instances/transfer-conversations',
       payload,
     ),
+}
+
+// Instagram Private Instances
+export const instagramPrivateApi = {
+  list: () =>
+    apiClient.get<InstagramPrivateInstance[]>('/api/instagram-private/instances'),
+  getStatus: (id: string) =>
+    apiClient.get<InstagramPrivateInstance>(`/api/instagram-private/instances/${id}/status`),
+  create: (payload: InstagramPrivatePayload) =>
+    apiClient.post<InstagramPrivateInstance>('/api/instagram-private/instances', payload),
+  connect: (id: string, credentials?: { username?: string; password?: string }) =>
+    apiClient.post(`/api/instagram-private/instances/${id}/connect`, credentials || {}),
+  challenge: (id: string, code: string) =>
+    apiClient.post(`/api/instagram-private/instances/${id}/challenge`, { code }),
+  disconnect: (id: string) =>
+    apiClient.post(`/api/instagram-private/instances/${id}/disconnect`),
+  delete: (id: string) =>
+    apiClient.delete(`/api/instagram-private/instances/${id}`),
 }
 
 // Conversations
