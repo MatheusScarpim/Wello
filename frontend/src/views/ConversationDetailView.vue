@@ -107,6 +107,11 @@ const isWaitingForCustomer = computed(
   () => conversation.value?.status === 'waiting',
 )
 
+// Instagram Private — só permite texto
+const isInstagramPrivate = computed(
+  () => conversation.value?.provider === 'instagram_private',
+)
+
 // AI Suggestion
 const isRequestingSuggestion = ref(false)
 const aiSuggestion = ref('')
@@ -2428,6 +2433,7 @@ onUnmounted(() => {
             </svg>
           </button>
           <button
+            v-if="!isInstagramPrivate"
             @click="selectMessageType('image')"
             class="type-btn"
             :class="messageType === 'image' ? 'type-btn-active' : 'type-btn-inactive'"
@@ -2435,6 +2441,7 @@ onUnmounted(() => {
             <Image class="w-4 h-4" />
           </button>
           <button
+            v-if="!isInstagramPrivate"
             @click="selectMessageType('document')"
             class="type-btn"
             :class="messageType === 'document' ? 'type-btn-active' : 'type-btn-inactive'"
@@ -2442,6 +2449,7 @@ onUnmounted(() => {
             <FileText class="w-4 h-4" />
           </button>
           <button
+            v-if="!isInstagramPrivate"
             @click="selectMessageType('audio')"
             class="type-btn"
             :class="messageType === 'audio' ? 'type-btn-active' : 'type-btn-inactive'"
@@ -2449,6 +2457,7 @@ onUnmounted(() => {
             <Mic class="w-4 h-4" />
           </button>
           <button
+            v-if="!isInstagramPrivate"
             @click="selectMessageType('video')"
             class="type-btn"
             :class="messageType === 'video' ? 'type-btn-active' : 'type-btn-inactive'"

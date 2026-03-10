@@ -194,7 +194,8 @@ export class AiAgentBot implements IBot {
       }
 
       // Se o cliente mandou áudio e a opção de responder com áudio está ativa, gerar TTS
-      if (wasAudioMessage && agentConfig.replyWithAudio && aiResponse.message) {
+      // Instagram Private só suporta texto — não enviar áudio
+      if (wasAudioMessage && agentConfig.replyWithAudio && aiResponse.message && context.provider !== 'instagram_private') {
         try {
           const audioResult = await this.textToSpeechForReply(aiResponse.message, openaiApiKey)
           if (audioResult) {
